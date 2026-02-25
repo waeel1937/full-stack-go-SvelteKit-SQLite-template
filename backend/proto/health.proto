@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package health;
+
+option go_package = "backend/proto;proto";
+
+service Health {
+  rpc Check (Empty) returns (Status);
+}
+
+message Empty {}
+
+message Status {
+  string value = 1;
+}

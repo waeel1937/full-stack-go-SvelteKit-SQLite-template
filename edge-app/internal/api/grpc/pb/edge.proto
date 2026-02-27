@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package edge;
+option go_package = "edge-app/internal/api/grpc/pb";
+
+message Aggregate {
+  int64 time = 1;
+  int64 window_ms = 2;
+  string metric = 3;
+  double avg = 4;
+  double min = 5;
+  double max = 6;
+  int64 count = 7;
+}
+
+message AggregateRequest {
+  int64 window_ms = 1;
+}
+
+message AggregateResponse {
+  repeated Aggregate items = 1;
+}
+
+service EdgeService {
+  rpc GetAggregates(AggregateRequest) returns (AggregateResponse);
+}

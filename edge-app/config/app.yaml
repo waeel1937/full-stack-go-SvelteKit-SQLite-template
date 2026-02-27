@@ -1,0 +1,9 @@
+server:
+  http_port: 8080
+  grpc_port: 9090
+
+database:
+  path: edge.db
+
+aggregator:
+  window_ms: 1000

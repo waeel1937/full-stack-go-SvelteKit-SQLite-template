@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"edge-app/internal/core"
+	"edge-app/internal/logging"
+	"edge-app/internal/metrics"
 )
 
 type Aggregator struct {
@@ -13,6 +15,7 @@ type Aggregator struct {
 }
 
 func (a *Aggregator) Run() {
+	logging.Logger.Println("aggregator started")
 	ticker := time.NewTicker(a.Window)
 	defer ticker.Stop()
 
@@ -28,6 +31,7 @@ func (a *Aggregator) Run() {
 	for {
 		select {
 		case m := <-a.In:
+			metrics.MetricsIngested.Inc()
 			v, ok := state[m.Key]
 			if !ok {
 				state[m.Key] = &acc{sum: m.Value, min: m.Value, max: m.Value, count: 1}
@@ -52,6 +56,7 @@ func (a *Aggregator) Run() {
 					Max:    v.max,
 					Count:  v.count,
 				}
+				metrics.AggregatesEmitted.Inc()
 			}
 			state = map[string]*acc{}
 		}

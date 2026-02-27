@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"edge-app/internal/metrics"
 )
 
 type Aggregate struct {
@@ -19,7 +21,9 @@ type Aggregate struct {
 }
 
 type Server struct {
-	DB *sql.DB
+	DB     *sql.DB
+	Status *StatusServer
+	Raw    *RawServer
 }
 
 func (s *Server) aggregates(w http.ResponseWriter, r *http.Request) {
@@ -66,6 +70,9 @@ LIMIT 100
 func (s *Server) Run(addr string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/aggregates", s.aggregates)
+	mux.HandleFunc("/api/v1/status", s.Status.Handler)
+	mux.HandleFunc("/api/v1/raw", s.Raw.Handler)
+	mux.Handle("/metrics", metrics.Handler())
 
 	srv := &http.Server{
 		Addr:              addr,

@@ -116,8 +116,9 @@ func (s *Server) validateToken(tokenStr string) bool {
 	if time.Now().Unix() > claims.Exp {
 		return false
 	}
-	expected := s.KeycloakURL + "/realms/" + s.Realm
-	if claims.Iss != expected {
+	expected1 := s.KeycloakURL + "/realms/" + s.Realm
+	expected2 := "http://localhost:8180/realms/" + s.Realm
+	if claims.Iss != expected1 && claims.Iss != expected2 {
 		return false
 	}
 	return true

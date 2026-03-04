@@ -27,6 +27,7 @@ services:
     container_name: edge-backend
     environment:
       - KEYCLOAK_URL=http://keycloak:8180
+      - KEYCLOAK_PUBLIC_URL=http://localhost:8180
       - KEYCLOAK_REALM=edge
     ports:
       - "8080:8080"

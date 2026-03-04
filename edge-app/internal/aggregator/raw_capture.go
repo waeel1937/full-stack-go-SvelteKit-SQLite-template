@@ -6,12 +6,13 @@ import (
 )
 
 type RawCapture struct {
-	In     <-chan core.MetricEvent
+	Bus    *core.Bus
 	Buffer *ringbuffer.Buffer
 }
 
 func (r *RawCapture) Run() {
-	for m := range r.In {
+	in := r.Bus.SubscribeMetrics(2048)
+	for m := range in {
 		r.Buffer.Add(m)
 	}
 }

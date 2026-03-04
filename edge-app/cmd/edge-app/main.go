@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
+	"math/rand"
 	"net"
 	"time"
 
@@ -17,7 +19,6 @@ import (
 	"edge-app/internal/rules"
 	"edge-app/internal/storage"
 	"edge-app/internal/storage/ringbuffer"
-	"edge-app/internal/sync"
 
 	"google.golang.org/grpc"
 )
@@ -43,38 +44,20 @@ func main() {
 
 	rawBuffer := ringbuffer.New(10000)
 
-	rawCapture := &aggregator.RawCapture{
-		In:     bus.Metrics,
-		Buffer: rawBuffer,
-	}
-
+	rawCapture := &aggregator.RawCapture{Bus: bus, Buffer: rawBuffer}
 	agg := &aggregator.Aggregator{
 		Window: time.Duration(cfg.Aggregator.WindowMs) * time.Millisecond,
-		In:     bus.Metrics,
-		Out:    bus.Aggregates,
+		Bus:    bus,
 	}
-
-	persist := &aggregator.Persister{
-		In:    bus.Aggregates,
-		Store: store,
-	}
-
-	ruleEngine := &rules.Engine{
-		In: bus.Aggregates,
-	}
+	persist := &aggregator.Persister{Bus: bus, Store: store}
+	ruleEngine := rules.NewEngine(bus)
 
 	status := api.NewStatusServer()
-
 	httpServer := &api.Server{
-		DB:     store.DB,
-		Status: status,
-		Raw:    &api.RawServer{Buffer: rawBuffer},
-	}
-
-	cloudSync := &sync.CloudSync{
-		DB:       store.DB,
-		Endpoint: "https://example.com/edge-sync",
-		Interval: 60 * time.Second,
+		DB:         store.DB,
+		Status:     status,
+		Raw:        &api.RawServer{Buffer: rawBuffer},
+		RuleEngine: ruleEngine,
 	}
 
 	grpcSrv := grpc.NewServer()
@@ -89,8 +72,7 @@ func main() {
 	go agg.Run()
 	go persist.Run()
 	go ruleEngine.Run()
-	go cloudSync.Run()
-	go httpServer.Run(":"+fmt.Sprint(cfg.Server.HTTPPort))
+	go httpServer.Run(":" + fmt.Sprint(cfg.Server.HTTPPort))
 	go grpcSrv.Serve(lis)
 
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -99,13 +81,27 @@ func main() {
 	for {
 		select {
 		case t := <-ticker.C:
-			bus.Metrics <- core.MetricEvent{
-				Time:   t,
-				Source: "demo",
-				Key:    "temperature",
-				Value:  float64(t.Unix() % 120),
-				OK:     true,
+			s := float64(t.UnixMilli()) / 1000.0
+			bus.PublishMetric(core.MetricEvent{
+				Time: t, Source: "sensor-1", Key: "temperature",
+				Value: 55 + 35*math.Sin(s/30.0) + rand.Float64()*5, OK: true,
+			})
+			bus.PublishMetric(core.MetricEvent{
+				Time: t, Source: "sensor-2", Key: "pressure",
+				Value: 50 + 10*math.Cos(s/45.0) + rand.Float64()*3, OK: true,
+			})
+			vib := 5 + 5*math.Sin(s/10.0) + rand.Float64()*2
+			if rand.Float64() < 0.02 {
+				vib += 20
 			}
+			bus.PublishMetric(core.MetricEvent{
+				Time: t, Source: "sensor-3", Key: "vibration",
+				Value: vib, OK: true,
+			})
+			bus.PublishMetric(core.MetricEvent{
+				Time: t, Source: "motor-1", Key: "rpm",
+				Value: 1500 + 100*math.Sin(s/60.0) + rand.Float64()*20, OK: true,
+			})
 		case <-ctx.Done():
 			grpcSrv.GracefulStop()
 			return

@@ -2,7 +2,6 @@ package ringbuffer
 
 import (
 	"sync"
-	"time"
 
 	"edge-app/internal/core"
 )

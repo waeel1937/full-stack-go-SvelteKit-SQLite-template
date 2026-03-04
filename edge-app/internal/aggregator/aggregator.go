@@ -10,12 +10,12 @@ import (
 
 type Aggregator struct {
 	Window time.Duration
-	In     <-chan core.MetricEvent
-	Out    chan<- core.AggregateEvent
+	Bus    *core.Bus
 }
 
 func (a *Aggregator) Run() {
 	logging.Logger.Println("aggregator started")
+	in := a.Bus.SubscribeMetrics(2048)
 	ticker := time.NewTicker(a.Window)
 	defer ticker.Stop()
 
@@ -30,7 +30,7 @@ func (a *Aggregator) Run() {
 
 	for {
 		select {
-		case m := <-a.In:
+		case m := <-in:
 			metrics.MetricsIngested.Inc()
 			v, ok := state[m.Key]
 			if !ok {
@@ -47,7 +47,7 @@ func (a *Aggregator) Run() {
 			}
 		case t := <-ticker.C:
 			for k, v := range state {
-				a.Out <- core.AggregateEvent{
+				a.Bus.PublishAggregate(core.AggregateEvent{
 					Time:   t,
 					Window: a.Window,
 					Key:    k,
@@ -55,7 +55,7 @@ func (a *Aggregator) Run() {
 					Min:    v.min,
 					Max:    v.max,
 					Count:  v.count,
-				}
+				})
 				metrics.AggregatesEmitted.Inc()
 			}
 			state = map[string]*acc{}

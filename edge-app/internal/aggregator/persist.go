@@ -8,12 +8,13 @@ import (
 )
 
 type Persister struct {
-	In    <-chan core.AggregateEvent
+	Bus   *core.Bus
 	Store *storage.Store
 }
 
 func (p *Persister) Run() {
-	for a := range p.In {
+	in := p.Bus.SubscribeAggregates(512)
+	for a := range in {
 		if err := p.Store.InsertAggregate(
 			a.Time,
 			a.Window,

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"net"
@@ -42,8 +43,14 @@ func main() {
 		panic(err)
 	}
 
-	rawBuffer := ringbuffer.New(10000)
+	if err := store.InitAuth(); err != nil {
+		panic(err)
+	}
+	if err := store.CreateUser("admin", "admin"); err == nil {
+		log.Println("default user created: admin/admin")
+	}
 
+	rawBuffer := ringbuffer.New(10000)
 	rawCapture := &aggregator.RawCapture{Bus: bus, Buffer: rawBuffer}
 	agg := &aggregator.Aggregator{
 		Window: time.Duration(cfg.Aggregator.WindowMs) * time.Millisecond,
@@ -55,6 +62,7 @@ func main() {
 	status := api.NewStatusServer()
 	httpServer := &api.Server{
 		DB:         store.DB,
+		Store:      store,
 		Status:     status,
 		Raw:        &api.RawServer{Buffer: rawBuffer},
 		RuleEngine: ruleEngine,

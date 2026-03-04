@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"math"
 	"math/rand"
 	"net"
+	"os"
 	"time"
 
 	"edge-app/internal/aggregator"
@@ -23,6 +23,13 @@ import (
 
 	"google.golang.org/grpc"
 )
+
+func env(k, d string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return d
+}
 
 func main() {
 	logging.Init()
@@ -43,13 +50,6 @@ func main() {
 		panic(err)
 	}
 
-	if err := store.InitAuth(); err != nil {
-		panic(err)
-	}
-	if err := store.CreateUser("admin", "admin"); err == nil {
-		log.Println("default user created: admin/admin")
-	}
-
 	rawBuffer := ringbuffer.New(10000)
 	rawCapture := &aggregator.RawCapture{Bus: bus, Buffer: rawBuffer}
 	agg := &aggregator.Aggregator{
@@ -59,13 +59,13 @@ func main() {
 	persist := &aggregator.Persister{Bus: bus, Store: store}
 	ruleEngine := rules.NewEngine(bus)
 
-	status := api.NewStatusServer()
 	httpServer := &api.Server{
-		DB:         store.DB,
-		Store:      store,
-		Status:     status,
-		Raw:        &api.RawServer{Buffer: rawBuffer},
-		RuleEngine: ruleEngine,
+		DB:          store.DB,
+		Status:      api.NewStatusServer(),
+		Raw:         &api.RawServer{Buffer: rawBuffer},
+		RuleEngine:  ruleEngine,
+		KeycloakURL: env("KEYCLOAK_URL", "http://localhost:8180"),
+		Realm:       env("KEYCLOAK_REALM", "edge"),
 	}
 
 	grpcSrv := grpc.NewServer()

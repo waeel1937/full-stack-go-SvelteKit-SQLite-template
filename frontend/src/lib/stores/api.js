@@ -1,6 +1,9 @@
 import { writable, get } from 'svelte/store';
 
 const BACKEND = typeof window !== 'undefined' ? 'http://localhost:8080' : 'http://backend:8080';
+const KC_URL = 'http://localhost:8180';
+const KC_REALM = 'edge';
+const KC_CLIENT = 'edge-frontend';
 
 export const token = writable(null);
 export const username = writable(null);
@@ -24,26 +27,24 @@ async function f(path) {
 }
 
 export async function login(user, pass) {
-  const res = await fetch(BACKEND + '/api/v1/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: user, password: pass })
+  const body = new URLSearchParams({
+    grant_type: 'password',
+    client_id: KC_CLIENT,
+    username: user,
+    password: pass
   });
+  const res = await fetch(
+    KC_URL + '/realms/' + KC_REALM + '/protocol/openid-connect/token',
+    { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body }
+  );
   if (!res.ok) throw new Error('Login failed');
   const data = await res.json();
-  token.set(data.token);
-  username.set(data.username);
+  token.set(data.access_token);
+  username.set(user);
   return data;
 }
 
-export async function logout() {
-  const t = get(token);
-  if (t) {
-    await fetch(BACKEND + '/api/v1/logout', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + t }
-    }).catch(() => {});
-  }
+export function logout() {
   token.set(null);
   username.set(null);
 }

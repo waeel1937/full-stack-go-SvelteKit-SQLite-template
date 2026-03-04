@@ -1,16 +1,19 @@
 package api
 
 import (
+	"crypto/rsa"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
+	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"edge-app/internal/metrics"
 	"edge-app/internal/rules"
-	"edge-app/internal/storage"
 )
 
 type Aggregate struct {
@@ -25,10 +28,13 @@ type Aggregate struct {
 
 type Server struct {
 	DB         *sql.DB
-	Store      *storage.Store
 	Status     *StatusServer
 	Raw        *RawServer
 	RuleEngine *rules.Engine
+	KeycloakURL string
+	Realm       string
+	pubKeys    []*rsa.PublicKey
+	keysMu     sync.RWMutex
 }
 
 func cors(next http.Handler) http.Handler {
@@ -44,6 +50,79 @@ func cors(next http.Handler) http.Handler {
 	})
 }
 
+type jwks struct {
+	Keys []jwk `json:"keys"`
+}
+
+type jwk struct {
+	Kty string `json:"kty"`
+	N   string `json:"n"`
+	E   string `json:"e"`
+	Use string `json:"use"`
+}
+
+func (s *Server) fetchKeys() {
+	url := s.KeycloakURL + "/realms/" + s.Realm + "/protocol/openid-connect/certs"
+	resp, err := http.Get(url)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	var keys jwks
+	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
+		return
+	}
+	var pubKeys []*rsa.PublicKey
+	for _, k := range keys.Keys {
+		if k.Kty != "RSA" || k.Use != "sig" {
+			continue
+		}
+		nBytes, err := base64.RawURLEncoding.DecodeString(k.N)
+		if err != nil {
+			continue
+		}
+		eBytes, err := base64.RawURLEncoding.DecodeString(k.E)
+		if err != nil {
+			continue
+		}
+		n := new(big.Int).SetBytes(nBytes)
+		e := 0
+		for _, b := range eBytes {
+			e = e<<8 + int(b)
+		}
+		pubKeys = append(pubKeys, &rsa.PublicKey{N: n, E: e})
+	}
+	s.keysMu.Lock()
+	s.pubKeys = pubKeys
+	s.keysMu.Unlock()
+}
+
+func (s *Server) validateToken(tokenStr string) bool {
+	parts := strings.Split(tokenStr, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return false
+	}
+	var claims struct {
+		Exp int64  `json:"exp"`
+		Iss string `json:"iss"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return false
+	}
+	if time.Now().Unix() > claims.Exp {
+		return false
+	}
+	expected := s.KeycloakURL + "/realms/" + s.Realm
+	if claims.Iss != expected {
+		return false
+	}
+	return true
+}
+
 func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions {
@@ -56,44 +135,12 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		token := strings.TrimPrefix(auth, "Bearer ")
-		user, valid := s.Store.ValidateSession(token)
-		if !valid {
-			http.Error(w, `{"error":"session expired"}`, http.StatusUnauthorized)
+		if !s.validateToken(token) {
+			http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
 			return
 		}
-		r.Header.Set("X-Username", user)
 		next(w, r)
 	}
-}
-
-func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	var req struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":"invalid request"}`, 400)
-		return
-	}
-	token, err := s.Store.Authenticate(req.Username, req.Password)
-	if err != nil {
-		http.Error(w, `{"error":"invalid credentials"}`, http.StatusUnauthorized)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"token": token, "username": req.Username})
-}
-
-func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	auth := r.Header.Get("Authorization")
-	if strings.HasPrefix(auth, "Bearer ") {
-		s.Store.DeleteSession(strings.TrimPrefix(auth, "Bearer "))
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) aggregates(w http.ResponseWriter, r *http.Request) {
@@ -147,11 +194,17 @@ func (s *Server) handleRules(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) Run(addr string) error {
+	go func() {
+		for {
+			s.fetchKeys()
+			time.Sleep(5 * time.Minute)
+		}
+	}()
+
 	mux := http.NewServeMux()
-
-	mux.HandleFunc("/api/v1/login", s.handleLogin)
-	mux.HandleFunc("/api/v1/logout", s.handleLogout)
-
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte("ok"))
+	})
 	mux.HandleFunc("/api/v1/aggregates", s.requireAuth(s.aggregates))
 	mux.HandleFunc("/api/v1/status", s.requireAuth(s.Status.Handler))
 	mux.HandleFunc("/api/v1/raw", s.requireAuth(s.Raw.Handler))

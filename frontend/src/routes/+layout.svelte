@@ -22,16 +22,16 @@
 
 <div class="shell">
   <nav class="side">
-    <div class="logo">⚙️ Edge<span style="color:var(--ac)">IIoT</span></div>
-    <a href="/">📊 Dashboard</a>
-    <a href="/alerts">🔔 Alerts</a>
-    <a href="/rules">⚡ Rules</a>
+    <div class="logo">Edge<span style="color:var(--ac)">IIoT</span></div>
+    <a href="/">Dashboard</a>
+    <a href="/alerts">Alerts</a>
+    <a href="/rules">Rules</a>
     <div class="st">
       {#if $status}
         <div><span class="dot gn"></span> Online</div>
         <div class="dim">{$status.goroutines} goroutines</div>
         <div class="dim">{$status.memory_mb?.toFixed(1)} MB</div>
-        <div class="dim">{$status.uptime_sec}s up</div>
+        <div class="dim">{$status.uptime_sec}s uptime</div>
       {:else}
         <div><span class="dot rd"></span> Connecting</div>
       {/if}
@@ -47,7 +47,7 @@
     padding: 1.5rem 1rem; display: flex; flex-direction: column; gap: 0.5rem;
     position: fixed; top: 0; left: 0; bottom: 0;
   }
-  .logo { font-weight: 700; font-size: 1.1rem; margin-bottom: 1rem; }
+  .logo { font-weight: 700; font-size: 1.1rem; margin-bottom: 1rem; font-family: monospace; }
   .side a {
     color: var(--dim); text-decoration: none; padding: 0.5rem 0.75rem;
     border-radius: 6px; font-size: 0.9rem;

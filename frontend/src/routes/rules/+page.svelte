@@ -17,7 +17,7 @@
 </script>
 
 <div class="top">
-  <h1 class="hdr">⚡ Rules</h1>
+  <h1 class="hdr">Rules</h1>
   <button class="btn" on:click={() => show = !show}>{show ? 'Cancel' : '+ Add Rule'}</button>
 </div>
 
@@ -49,7 +49,7 @@
     <div class="rm">{r.message}</div>
   </div>
 {:else}
-  <div class="empty">No rules.</div>
+  <div class="empty">No rules configured.</div>
 {/each}
 
 <style>

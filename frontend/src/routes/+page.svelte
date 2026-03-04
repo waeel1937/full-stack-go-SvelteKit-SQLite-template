@@ -10,7 +10,7 @@
   });
 
   const cards = [
-    { key: 'temperature', label: 'Temperature', unit: '°C', color: '#f87171' },
+    { key: 'temperature', label: 'Temperature', unit: 'C', color: '#f87171' },
     { key: 'pressure',    label: 'Pressure',    unit: 'bar', color: '#22d3ee' },
     { key: 'vibration',   label: 'Vibration',   unit: 'mm/s', color: '#fb923c' },
     { key: 'rpm',         label: 'Motor RPM',   unit: 'rpm', color: '#a78bfa' },
@@ -23,12 +23,10 @@
   }
 </script>
 
-<h1 class="hdr">
-  Dashboard <span class="live">LIVE</span>
-</h1>
+<h1 class="hdr">Dashboard <span class="live">LIVE</span></h1>
 
 {#if loading}
-  <p class="load">Loading...</p>
+  <p class="load">Loading sensor data...</p>
 {:else}
   <div class="cards">
     {#each cards as c}

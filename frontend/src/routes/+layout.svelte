@@ -5,8 +5,15 @@
   let loginUser = '';
   let loginPass = '';
   let loginError = '';
+  let dark = true;
+
+  function toggleTheme() {
+    dark = !dark;
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  }
 
   onMount(() => {
+    document.documentElement.setAttribute('data-theme', 'dark');
     if ($token) {
       fetchStatus();
       const i = setInterval(fetchStatus, 5000);
@@ -29,48 +36,57 @@
 
 <svelte:head>
 <style>
-  :root {
-    --bg: #0a0e17; --sf: #111827; --sf2: #1a2332; --bd: #1e2d3d;
-    --tx: #e2e8f0; --dim: #64748b; --ac: #22d3ee; --gn: #34d399;
-    --rd: #f87171; --or: #fb923c; --vi: #a78bfa;
+  :root, [data-theme="dark"] {
+    --bg: #0c1117; --sf: #141c24; --sf2: #1a252f; --bd: #243040;
+    --tx: #d4dce6; --dim: #5a6e82; --ac: #2dd4a0; --ac2: #1a9e76;
+    --gn: #2dd4a0; --rd: #e85454; --or: #e8a54e;
+  }
+  [data-theme="light"] {
+    --bg: #f0f4f2; --sf: #ffffff; --sf2: #e8eeea; --bd: #c8d4cc;
+    --tx: #1a2e24; --dim: #5a7266; --ac: #1a9e76; --ac2: #148060;
+    --gn: #1a9e76; --rd: #c43c3c; --or: #c48a30;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--tx); font-family: system-ui, sans-serif; }
+  body { background: var(--bg); color: var(--tx); font-family: 'IBM Plex Sans', system-ui, sans-serif; transition: background 0.3s, color 0.3s; }
 </style>
 </svelte:head>
 
 {#if !$token}
   <div class="login-wrap">
     <div class="login-box">
-      <div class="login-logo">Edge<span style="color:var(--ac)">IIoT</span></div>
-      <div class="login-title">Sign in</div>
+      <div class="login-logo">Edge<span class="accent">IIoT</span></div>
+      <div class="login-sub">Industrial Edge Platform</div>
       {#if loginError}
         <div class="login-err">{loginError}</div>
       {/if}
       <label>Username<input bind:value={loginUser} placeholder="admin" /></label>
       <label>Password<input type="password" bind:value={loginPass} placeholder="password" on:keydown={(e) => e.key === 'Enter' && handleLogin()} /></label>
-      <button class="login-btn" on:click={handleLogin}>Login</button>
+      <button class="btn-primary" on:click={handleLogin}>Sign in</button>
+      <button class="btn-toggle" on:click={toggleTheme}>{dark ? 'Light mode' : 'Dark mode'}</button>
     </div>
   </div>
 {:else}
   <div class="shell">
     <nav class="side">
-      <div class="logo">Edge<span style="color:var(--ac)">IIoT</span></div>
-      <a href="/">Dashboard</a>
-      <a href="/alerts">Alerts</a>
-      <a href="/rules">Rules</a>
-      <div class="st">
+      <div class="logo">Edge<span class="accent">IIoT</span></div>
+      <div class="nav-section">
+        <a href="/" class="nav-link">Dashboard</a>
+        <a href="/alerts" class="nav-link">Alerts</a>
+        <a href="/rules" class="nav-link">Rules</a>
+      </div>
+      <div class="side-footer">
+        <button class="btn-toggle small" on:click={toggleTheme}>{dark ? 'Light' : 'Dark'}</button>
         {#if $status}
-          <div><span class="dot gn"></span> Online</div>
-          <div class="dim">{$status.goroutines} goroutines</div>
-          <div class="dim">{$status.memory_mb?.toFixed(1)} MB</div>
-          <div class="dim">{$status.uptime_sec}s uptime</div>
+          <div class="status-row"><span class="dot on"></span> Online</div>
+          <div class="status-detail">{$status.goroutines} goroutines</div>
+          <div class="status-detail">{$status.memory_mb?.toFixed(1)} MB</div>
+          <div class="status-detail">{$status.uptime_sec}s uptime</div>
         {:else}
-          <div><span class="dot rd"></span> Connecting</div>
+          <div class="status-row"><span class="dot off"></span> Connecting</div>
         {/if}
-        <div class="user-info">
-          <span class="dim">{$username}</span>
-          <button class="logout-btn" on:click={logout}>Logout</button>
+        <div class="user-row">
+          <span class="status-detail">{$username}</span>
+          <button class="btn-logout" on:click={logout}>Logout</button>
         </div>
       </div>
     </nav>
@@ -79,28 +95,34 @@
 {/if}
 
 <style>
+  .accent { color: var(--ac); }
   .login-wrap { display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-  .login-box { background: var(--sf); border: 1px solid var(--bd); border-radius: 12px; padding: 2.5rem; width: 340px; display: flex; flex-direction: column; gap: 1rem; }
-  .login-logo { font-family: monospace; font-weight: 700; font-size: 1.3rem; text-align: center; }
-  .login-title { text-align: center; color: var(--dim); font-size: 0.9rem; }
-  .login-err { color: var(--rd); font-size: 0.8rem; text-align: center; }
+  .login-box { background: var(--sf); border: 1px solid var(--bd); border-radius: 12px; padding: 2.5rem; width: 360px; display: flex; flex-direction: column; gap: 1rem; }
+  .login-logo { font-family: monospace; font-weight: 700; font-size: 1.5rem; text-align: center; letter-spacing: -0.5px; }
+  .login-sub { text-align: center; color: var(--dim); font-size: 0.8rem; letter-spacing: 0.5px; }
+  .login-err { color: var(--rd); font-size: 0.8rem; text-align: center; padding: 0.4rem; background: rgba(232,84,84,0.1); border-radius: 6px; }
   .login-box label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; color: var(--dim); font-weight: 600; }
-  .login-box input { font-family: monospace; font-size: 0.85rem; padding: 0.6rem; background: var(--bg); color: var(--tx); border: 1px solid var(--bd); border-radius: 6px; outline: none; }
+  .login-box input { font-family: monospace; font-size: 0.85rem; padding: 0.65rem 0.75rem; background: var(--bg); color: var(--tx); border: 1px solid var(--bd); border-radius: 8px; outline: none; transition: border 0.2s; }
   .login-box input:focus { border-color: var(--ac); }
-  .login-btn { font-family: monospace; font-size: 0.85rem; padding: 0.6rem; background: var(--ac); color: var(--bg); border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
-  .login-btn:hover { opacity: 0.9; }
+  .btn-primary { font-family: monospace; font-size: 0.85rem; padding: 0.7rem; background: var(--ac); color: #0c1117; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; transition: background 0.2s; }
+  .btn-primary:hover { background: var(--ac2); }
+  .btn-toggle { font-family: monospace; font-size: 0.75rem; padding: 0.4rem; background: none; color: var(--dim); border: 1px solid var(--bd); border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+  .btn-toggle:hover { color: var(--tx); border-color: var(--ac); }
+  .btn-toggle.small { width: 100%; margin-bottom: 0.75rem; }
   .shell { display: flex; min-height: 100vh; }
-  .side { width: 200px; background: var(--sf); border-right: 1px solid var(--bd); padding: 1.5rem 1rem; display: flex; flex-direction: column; gap: 0.5rem; position: fixed; top: 0; left: 0; bottom: 0; }
-  .logo { font-weight: 700; font-size: 1.1rem; margin-bottom: 1rem; font-family: monospace; }
-  .side a { color: var(--dim); text-decoration: none; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.9rem; }
-  .side a:hover { background: var(--sf2); color: var(--tx); }
-  main { margin-left: 200px; padding: 2rem; flex: 1; }
-  .st { margin-top: auto; padding: 0.75rem; background: var(--sf2); border-radius: 8px; font-size: 0.8rem; }
-  .dim { color: var(--dim); font-size: 0.75rem; font-family: monospace; padding-left: 1rem; }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.4rem; }
-  .dot.gn { background: var(--gn); box-shadow: 0 0 6px var(--gn); }
-  .dot.rd { background: var(--rd); box-shadow: 0 0 6px var(--rd); }
-  .user-info { display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--bd); }
-  .logout-btn { font-family: monospace; font-size: 0.7rem; padding: 0.2rem 0.5rem; background: none; color: var(--rd); border: 1px solid var(--rd); border-radius: 4px; cursor: pointer; }
-  .logout-btn:hover { background: var(--rd); color: var(--bg); }
+  .side { width: 210px; background: var(--sf); border-right: 1px solid var(--bd); padding: 1.5rem 1rem; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; transition: background 0.3s; }
+  .logo { font-weight: 700; font-size: 1.2rem; margin-bottom: 2rem; font-family: monospace; letter-spacing: -0.5px; }
+  .nav-section { display: flex; flex-direction: column; gap: 0.25rem; }
+  .nav-link { color: var(--dim); text-decoration: none; padding: 0.6rem 0.75rem; border-radius: 8px; font-size: 0.88rem; font-weight: 500; transition: all 0.15s; border-left: 2px solid transparent; }
+  .nav-link:hover { background: var(--sf2); color: var(--ac); border-left-color: var(--ac); }
+  main { margin-left: 210px; padding: 2rem 2.5rem; flex: 1; }
+  .side-footer { margin-top: auto; padding: 0.75rem; background: var(--sf2); border-radius: 8px; font-size: 0.8rem; transition: background 0.3s; }
+  .status-row { display: flex; align-items: center; gap: 0.4rem; font-weight: 600; font-size: 0.8rem; margin-bottom: 0.3rem; }
+  .status-detail { color: var(--dim); font-size: 0.72rem; font-family: monospace; padding-left: 1rem; line-height: 1.5; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
+  .dot.on { background: var(--gn); box-shadow: 0 0 8px var(--gn); }
+  .dot.off { background: var(--rd); box-shadow: 0 0 8px var(--rd); }
+  .user-row { display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--bd); }
+  .btn-logout { font-family: monospace; font-size: 0.68rem; padding: 0.2rem 0.5rem; background: none; color: var(--dim); border: 1px solid var(--bd); border-radius: 4px; cursor: pointer; transition: all 0.2s; }
+  .btn-logout:hover { color: var(--rd); border-color: var(--rd); }
 </style>

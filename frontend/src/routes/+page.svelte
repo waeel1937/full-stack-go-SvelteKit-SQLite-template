@@ -10,10 +10,10 @@
   });
 
   const cards = [
-    { key: 'temperature', label: 'Temperature', unit: 'C', color: '#f87171' },
-    { key: 'pressure',    label: 'Pressure',    unit: 'bar', color: '#22d3ee' },
-    { key: 'vibration',   label: 'Vibration',   unit: 'mm/s', color: '#fb923c' },
-    { key: 'rpm',         label: 'Motor RPM',   unit: 'rpm', color: '#a78bfa' },
+    { key: 'temperature', label: 'Temperature', unit: 'C' },
+    { key: 'pressure',    label: 'Pressure',    unit: 'bar' },
+    { key: 'vibration',   label: 'Vibration',   unit: 'mm/s' },
+    { key: 'rpm',         label: 'Motor RPM',   unit: 'rpm' },
   ];
 
   function lastVal(data, key) {
@@ -23,33 +23,37 @@
   }
 </script>
 
-<h1 class="hdr">Dashboard <span class="live">LIVE</span></h1>
+<div class="page-head">
+  <h1>Dashboard</h1>
+  <span class="live-badge">LIVE</span>
+</div>
 
 {#if loading}
-  <p class="load">Loading sensor data...</p>
+  <div class="loading">Loading sensor data...</div>
 {:else}
   <div class="cards">
     {#each cards as c}
       <div class="card">
-        <div class="cl">{c.label}</div>
-        <div class="cv" style="color:{c.color}">{lastVal($metrics, c.key)}<span class="cu">{c.unit}</span></div>
+        <div class="card-label">{c.label}</div>
+        <div class="card-value">{lastVal($metrics, c.key)}<span class="card-unit">{c.unit}</span></div>
+        <div class="card-bar"><div class="card-bar-fill" style="width: {Math.min(100, Math.max(0, parseFloat(lastVal($metrics, c.key)) / (c.key === 'rpm' ? 20 : 1)))}%"></div></div>
       </div>
     {/each}
   </div>
 
-  <h2 class="sh">Aggregate History</h2>
-  <div class="tw">
+  <h2 class="section-title">Aggregate History</h2>
+  <div class="table-wrap">
     <table>
       <thead><tr><th>Time</th><th>Metric</th><th>Avg</th><th>Min</th><th>Max</th><th>Count</th></tr></thead>
       <tbody>
         {#each $history.slice(0, 20) as r}
           <tr>
-            <td class="m">{new Date(r.time * 1000).toLocaleTimeString()}</td>
+            <td class="mono">{new Date(r.time * 1000).toLocaleTimeString()}</td>
             <td>{r.metric}</td>
-            <td class="m">{r.avg.toFixed(2)}</td>
-            <td class="m">{r.min.toFixed(2)}</td>
-            <td class="m">{r.max.toFixed(2)}</td>
-            <td class="m">{r.count}</td>
+            <td class="mono">{r.avg.toFixed(2)}</td>
+            <td class="mono">{r.min.toFixed(2)}</td>
+            <td class="mono">{r.max.toFixed(2)}</td>
+            <td class="mono">{r.count}</td>
           </tr>
         {/each}
       </tbody>
@@ -58,21 +62,24 @@
 {/if}
 
 <style>
-  .hdr { font-size: 1.4rem; margin-bottom: 1.5rem; font-family: monospace; }
-  .live { font-size: 0.7rem; color: var(--ac); border: 1px solid var(--ac); padding: 0.15rem 0.5rem; border-radius: 4px; animation: pulse 2s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-  .load { color: var(--dim); text-align: center; padding: 3rem; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 1rem; }
-  .card { background: var(--sf); border: 1px solid var(--bd); border-radius: 10px; padding: 1.2rem; }
-  .cl { color: var(--dim); font-size: 0.85rem; margin-bottom: 0.5rem; }
-  .cv { font-family: monospace; font-size: 2rem; font-weight: 700; }
-  .cu { font-size: 0.8rem; color: var(--dim); font-weight: 400; }
-  .sh { font-family: monospace; font-size: 1rem; color: var(--dim); margin: 2rem 0 1rem; }
-  .tw { overflow-x: auto; background: var(--sf); border: 1px solid var(--bd); border-radius: 10px; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-  th { text-align: left; padding: 0.7rem 1rem; color: var(--dim); font-size: 0.75rem; text-transform: uppercase; border-bottom: 1px solid var(--bd); }
+  .page-head { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .page-head h1 { font-size: 1.4rem; font-family: monospace; font-weight: 700; }
+  .live-badge { font-family: monospace; font-size: 0.65rem; font-weight: 700; color: var(--ac); border: 1px solid var(--ac); padding: 0.15rem 0.6rem; border-radius: 4px; letter-spacing: 1px; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+  .loading { text-align: center; color: var(--dim); padding: 4rem; font-family: monospace; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 1rem; margin-bottom: 2rem; }
+  .card { background: var(--sf); border: 1px solid var(--bd); border-radius: 10px; padding: 1.25rem; transition: background 0.3s, border 0.3s; }
+  .card-label { color: var(--dim); font-size: 0.8rem; font-weight: 600; margin-bottom: 0.5rem; letter-spacing: 0.3px; }
+  .card-value { font-family: monospace; font-size: 2rem; font-weight: 700; color: var(--ac); line-height: 1.1; }
+  .card-unit { font-size: 0.75rem; color: var(--dim); font-weight: 400; margin-left: 0.2rem; }
+  .card-bar { height: 3px; background: var(--bd); border-radius: 2px; margin-top: 0.75rem; overflow: hidden; }
+  .card-bar-fill { height: 100%; background: var(--ac); border-radius: 2px; transition: width 0.5s ease; }
+  .section-title { font-family: monospace; font-size: 0.95rem; color: var(--dim); margin-bottom: 0.75rem; font-weight: 600; }
+  .table-wrap { overflow-x: auto; background: var(--sf); border: 1px solid var(--bd); border-radius: 10px; transition: background 0.3s; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  th { text-align: left; padding: 0.65rem 1rem; color: var(--dim); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--bd); }
   td { padding: 0.5rem 1rem; border-bottom: 1px solid var(--bd); }
   tr:last-child td { border: none; }
   tr:hover { background: var(--sf2); }
-  .m { font-family: monospace; font-size: 0.8rem; }
+  .mono { font-family: monospace; font-size: 0.78rem; }
 </style>

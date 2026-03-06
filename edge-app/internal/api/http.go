@@ -27,14 +27,14 @@ type Aggregate struct {
 }
 
 type Server struct {
-	DB         *sql.DB
-	Status     *StatusServer
-	Raw        *RawServer
-	RuleEngine *rules.Engine
+	DB          *sql.DB
+	Status      *StatusServer
+	Raw         *RawServer
+	RuleEngine  *rules.Engine
 	KeycloakURL string
 	Realm       string
-	pubKeys    []*rsa.PublicKey
-	keysMu     sync.RWMutex
+	pubKeys     []*rsa.PublicKey
+	keysMu      sync.RWMutex
 }
 
 func cors(next http.Handler) http.Handler {
@@ -97,31 +97,32 @@ func (s *Server) fetchKeys() {
 	s.keysMu.Unlock()
 }
 
-func (s *Server) validateToken(tokenStr string) bool {
+func (s *Server) parseToken(tokenStr string) ([]string, bool) {
 	parts := strings.Split(tokenStr, ".")
 	if len(parts) != 3 {
-		return false
+		return nil, false
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return false
+		return nil, false
 	}
 	var claims struct {
-		Exp int64  `json:"exp"`
-		Iss string `json:"iss"`
+		Exp   int64    `json:"exp"`
+		Iss   string   `json:"iss"`
+		Roles []string `json:"roles"`
 	}
 	if err := json.Unmarshal(payload, &claims); err != nil {
-		return false
+		return nil, false
 	}
 	if time.Now().Unix() > claims.Exp {
-		return false
+		return nil, false
 	}
 	expected1 := s.KeycloakURL + "/realms/" + s.Realm
 	expected2 := "http://localhost:8180/realms/" + s.Realm
 	if claims.Iss != expected1 && claims.Iss != expected2 {
-		return false
+		return nil, false
 	}
-	return true
+	return claims.Roles, true
 }
 
 func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
@@ -136,12 +137,27 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		token := strings.TrimPrefix(auth, "Bearer ")
-		if !s.validateToken(token) {
+		roles, valid := s.parseToken(token)
+		if !valid {
 			http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
 			return
 		}
+		r.Header.Set("X-Roles", strings.Join(roles, ","))
 		next(w, r)
 	}
+}
+
+func (s *Server) requireRole(role string, next http.HandlerFunc) http.HandlerFunc {
+	return s.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+		roles := strings.Split(r.Header.Get("X-Roles"), ",")
+		for _, ro := range roles {
+			if ro == role {
+				next(w, r)
+				return
+			}
+		}
+		http.Error(w, `{"error":"forbidden","required":"` + role + `"}`, http.StatusForbidden)
+	})
 }
 
 func (s *Server) aggregates(w http.ResponseWriter, r *http.Request) {
@@ -175,20 +191,40 @@ func (s *Server) aggregates(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(out)
 }
 
+func (s *Server) handleRulesGet(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(s.RuleEngine.GetRules())
+}
+
+func (s *Server) handleRulesPost(w http.ResponseWriter, r *http.Request) {
+	var rule rules.Rule
+	if err := json.NewDecoder(r.Body).Decode(&rule); err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	s.RuleEngine.AddRule(rule)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(rule)
+}
+
 func (s *Server) handleRules(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(s.RuleEngine.GetRules())
+		s.handleRulesGet(w, r)
 	case http.MethodPost:
-		var rule rules.Rule
-		if err := json.NewDecoder(r.Body).Decode(&rule); err != nil {
-			http.Error(w, err.Error(), 400)
+		roles := strings.Split(r.Header.Get("X-Roles"), ",")
+		isAdmin := false
+		for _, ro := range roles {
+			if ro == "admin" {
+				isAdmin = true
+				break
+			}
+		}
+		if !isAdmin {
+			http.Error(w, `{"error":"forbidden","message":"admin role required to create rules"}`, http.StatusForbidden)
 			return
 		}
-		s.RuleEngine.AddRule(rule)
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(rule)
+		s.handleRulesPost(w, r)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -201,7 +237,6 @@ func (s *Server) Run(addr string) error {
 			time.Sleep(5 * time.Minute)
 		}
 	}()
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte("ok"))
@@ -211,7 +246,6 @@ func (s *Server) Run(addr string) error {
 	mux.HandleFunc("/api/v1/raw", s.requireAuth(s.Raw.Handler))
 	mux.HandleFunc("/api/v1/rules", s.requireAuth(s.handleRules))
 	mux.Handle("/metrics", metrics.Handler())
-
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           cors(mux),

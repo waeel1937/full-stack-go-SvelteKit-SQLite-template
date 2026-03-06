@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 
+	"edge-app/internal/connector"
 	"gopkg.in/yaml.v3"
 )
 
@@ -19,6 +20,8 @@ type Config struct {
 	Aggregator struct {
 		WindowMs int64 `yaml:"window_ms"`
 	} `yaml:"aggregator"`
+
+	Connectors connector.Config `yaml:"connectors"`
 }
 
 func Load(path string) (*Config, error) {

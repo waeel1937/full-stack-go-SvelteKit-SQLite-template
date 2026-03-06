@@ -7,3 +7,42 @@ database:
 
 aggregator:
   window_ms: 1000
+
+connectors:
+  modbus:
+    enabled: false
+    host: 192.168.1.100
+    port: 502
+    unit_id: 1
+    poll_ms: 500
+    registers:
+      - address: 0
+        key: temperature
+        source: plc-1
+        type: float32
+        scale: 0.1
+      - address: 2
+        key: pressure
+        source: plc-1
+        type: uint16
+        scale: 0.01
+      - address: 3
+        key: vibration
+        source: plc-1
+        type: int16
+        scale: 0.001
+
+  opcua:
+    enabled: false
+    endpoint: opc.tcp://192.168.1.200:4840
+    poll_ms: 1000
+    nodes:
+      - node_id: ns=2;s=Temperature
+        key: temperature
+        source: opcua-server-1
+      - node_id: ns=2;s=Pressure
+        key: pressure
+        source: opcua-server-1
+      - node_id: ns=2;s=RPM
+        key: rpm
+        source: opcua-server-1

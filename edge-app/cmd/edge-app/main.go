@@ -14,6 +14,7 @@ import (
 	pb "edge-app/internal/api/grpc/pb"
 	"edge-app/internal/api"
 	"edge-app/internal/config"
+	"edge-app/internal/connector"
 	"edge-app/internal/core"
 	"edge-app/internal/logging"
 	"edge-app/internal/metrics"
@@ -83,12 +84,26 @@ func main() {
 	go httpServer.Run(":" + fmt.Sprint(cfg.Server.HTTPPort))
 	go grpcSrv.Serve(lis)
 
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
+	connector.StartAll(cfg.Connectors, bus)
 
+	hasConnector := cfg.Connectors.Modbus.Enabled || cfg.Connectors.OPCUA.Enabled
+	if !hasConnector {
+		logging.Logger.Println("no connectors enabled, starting demo producer")
+		go demo(ctx, bus)
+	}
+
+	<-ctx.Done()
+	grpcSrv.GracefulStop()
+}
+
+func demo(ctx context.Context, bus *core.Bus) {
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
 	for {
 		select {
-		case t := <-ticker.C:
+		case <-ctx.Done():
+			return
+		case t := <-tick.C:
 			s := float64(t.UnixMilli()) / 1000.0
 			bus.PublishMetric(core.MetricEvent{
 				Time: t, Source: "sensor-1", Key: "temperature",
@@ -110,9 +125,6 @@ func main() {
 				Time: t, Source: "motor-1", Key: "rpm",
 				Value: 1500 + 100*math.Sin(s/60.0) + rand.Float64()*20, OK: true,
 			})
-		case <-ctx.Done():
-			grpcSrv.GracefulStop()
-			return
 		}
 	}
 }

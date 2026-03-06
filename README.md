@@ -199,3 +199,122 @@ Wait about 60 seconds for Keycloak first start. Then:
     ├── tauri.conf.json
     └── src/main.rs
 ```
+
+---
+
+## API Endpoints
+
+All `/api/v1/*` endpoints require a valid JWT token in the `Authorization: Bearer <token>` header.
+```
+GET  /health                          # Public health check
+GET  /api/v1/status                   # System health and resource usage
+GET  /api/v1/aggregates?window_ms=    # Aggregated time series
+GET  /api/v1/raw                      # Raw ring buffer snapshot
+GET  /api/v1/rules                    # List active rules
+POST /api/v1/rules                    # Create or update a rule
+GET  /metrics                         # Prometheus metrics
+```
+
+### gRPC
+```protobuf
+service EdgeService {
+  rpc StreamMetrics (StreamRequest) returns (stream MetricEvent);
+  rpc GetAggregates (AggregateRequest) returns (AggregateResponse);
+}
+```
+
+---
+
+## Authentication
+
+Keycloak provides OAuth2 authentication with JWT tokens. The edge realm is auto-imported on first start with preconfigured clients and users.
+
+Login via API:
+```bash
+curl -X POST http://localhost:8180/realms/edge/protocol/openid-connect/token \
+  -d "grant_type=password&client_id=edge-frontend&username=admin&password=admin"
+```
+
+Use the returned `access_token` as Bearer token:
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:8080/api/v1/status
+```
+
+| Username | Password | Role |
+|---|---|---|
+| admin | admin | Administrator |
+| operator | operator | Operator |
+
+---
+
+## Frontend
+
+SvelteKit application with green industrial theme and dark/light mode toggle.
+
+Pages: Dashboard (live sensor cards with value bars), Alerts (threshold violations), Rules (create and manage alert rules).
+
+The frontend authenticates against Keycloak using the OAuth2 password grant and sends JWT tokens to the backend API.
+
+### Tauri Desktop Shell
+
+To run as a native desktop application on the edge device (requires Rust):
+```bash
+cd src-tauri && cargo tauri dev
+```
+
+For production build:
+```bash
+cd src-tauri && cargo tauri build
+```
+
+---
+
+## Build for Edge Device
+```bash
+# ARM64 (Revolution Pi 4, modern IPCs)
+./edge-app/scripts/build-arm64.sh
+
+# ARMv7 (Revolution Pi 3, older embedded)
+./edge-app/scripts/build-armv7.sh
+```
+
+---
+
+## Deploy to Device
+```bash
+scp dist/edge-app user@device:/opt/edge-app/
+scp edge-app/deploy/systemd/edge-app.service user@device:/etc/systemd/system/
+ssh user@device "systemctl enable --now edge-app"
+```
+
+---
+
+## Deployment Targets
+
+| Device | Architecture | RAM | Power | Status |
+|---|---|---|---|---|
+| Revolution Pi 4 | ARM64 | 2 GB | 5W | supported |
+| Revolution Pi 3 | ARMv7 | 1 GB | 4W | supported |
+| Siemens IPC127E | x86-64 | 4 GB | 15W | supported |
+| Beckhoff CX series | x86-64 | 2 GB | 10W | supported |
+| Generic ARM SBC | ARMv7+ | 512 MB+ | 3W+ | supported |
+
+---
+
+## Green IT Summary
+```
+Runs on existing hardware — no replacement needed
+Single static binary — no runtime dependencies
+< 30 MB RAM at idle
+95-99% less data sent to cloud
+Local rule evaluation < 10 ms latency
+Offline-first — works without internet connectivity
+Supports hardware from 2016 onward
+Designed for ESG reporting and Scope 3 disclosures
+```
+
+---
+
+## License
+
+MIT

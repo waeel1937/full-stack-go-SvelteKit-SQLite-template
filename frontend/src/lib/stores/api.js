@@ -1,16 +1,26 @@
 import { writable, get } from 'svelte/store';
-
 const BACKEND = typeof window !== 'undefined' ? 'http://localhost:8080' : 'http://backend:8080';
 const KC_URL = 'http://localhost:8180';
 const KC_REALM = 'edge';
 const KC_CLIENT = 'edge-frontend';
 
-export const token = writable(null);
-export const username = writable(null);
-export const status = writable(null);
+const browser = typeof window !== 'undefined';
+
+// beim Start aus localStorage einlesen (nur im Browser, nicht bei SSR)
+export const token        = writable(browser ? localStorage.getItem('edge_token')    : null);
+export const refreshToken = writable(browser ? localStorage.getItem('edge_refresh')  : null);
+export const username      = writable(browser ? localStorage.getItem('edge_username') : null);
+export const status  = writable(null);
 export const metrics = writable([]);
 export const history = writable([]);
-export const rules = writable([]);
+export const rules   = writable([]);
+
+// jede Aenderung sofort persistieren / loeschen
+if (browser) {
+  token.subscribe(v        => v ? localStorage.setItem('edge_token', v)    : localStorage.removeItem('edge_token'));
+  refreshToken.subscribe(v => v ? localStorage.setItem('edge_refresh', v)  : localStorage.removeItem('edge_refresh'));
+  username.subscribe(v     => v ? localStorage.setItem('edge_username', v) : localStorage.removeItem('edge_username'));
+}
 
 function headers() {
   const t = get(token);
@@ -19,9 +29,34 @@ function headers() {
   return h;
 }
 
-async function f(path) {
+// Access-Token per Refresh-Token erneuern
+async function refresh() {
+  const rt = get(refreshToken);
+  if (!rt) return false;
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    client_id: KC_CLIENT,
+    refresh_token: rt
+  });
+  const res = await fetch(
+    KC_URL + '/realms/' + KC_REALM + '/protocol/openid-connect/token',
+    { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body }
+  );
+  if (!res.ok) { logout(); return false; }
+  const data = await res.json();
+  token.set(data.access_token);
+  if (data.refresh_token) refreshToken.set(data.refresh_token);
+  return true;
+}
+
+async function f(path, retry = true) {
   const res = await fetch(BACKEND + path, { headers: headers() });
-  if (res.status === 401) { token.set(null); username.set(null); throw new Error('unauthorized'); }
+  if (res.status === 401) {
+    // einmal Token erneuern und Request wiederholen, sonst ausloggen
+    if (retry && await refresh()) return f(path, false);
+    logout();
+    throw new Error('unauthorized');
+  }
   if (!res.ok) throw new Error('API ' + res.status);
   return res.json();
 }
@@ -40,12 +75,14 @@ export async function login(user, pass) {
   if (!res.ok) throw new Error('Login failed');
   const data = await res.json();
   token.set(data.access_token);
+  refreshToken.set(data.refresh_token);
   username.set(user);
   return data;
 }
 
 export function logout() {
   token.set(null);
+  refreshToken.set(null);
   username.set(null);
 }
 

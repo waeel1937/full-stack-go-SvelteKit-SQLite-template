@@ -6,7 +6,7 @@
   let loginUser = '';
   let loginPass = '';
   let loginError = '';
-  let dark = true;
+  let dark = false;
   let statusInterval = null;
 
   function toggleTheme() {
@@ -15,7 +15,7 @@
   }
 
   onMount(() => {
-    document.documentElement.setAttribute('data-theme', 'dark');
+    document.documentElement.setAttribute('data-theme', 'light');
     const unsub = token.subscribe(t => {
       clearInterval(statusInterval);
       statusInterval = null;

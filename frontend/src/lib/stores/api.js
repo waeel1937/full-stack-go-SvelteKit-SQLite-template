@@ -126,12 +126,18 @@ export async function fetchRules() {
 	return d;
 }
 
-export async function createRule(rule) {
+export async function createRule(rule, retry = true) {
 	const res = await fetch(BACKEND + '/api/v1/rules', {
 		method:  'POST',
 		headers: authHeaders(),
 		body:    JSON.stringify(rule),
 	});
+	if (res.status === 401) {
+		if (retry && await refreshAccessToken()) return createRule(rule, false);
+		logout();
+		throw new Error('unauthorized');
+	}
+	if (res.status === 403) throw new Error('Forbidden: admin role required');
 	if (!res.ok) throw new Error(`Create rule failed: ${res.status}`);
 	return res.json();
 }

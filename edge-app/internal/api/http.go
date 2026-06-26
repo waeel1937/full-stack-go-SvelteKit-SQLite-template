@@ -186,9 +186,11 @@ func (s *Server) parseToken(tokenStr string) (roles []string, ok bool) {
 		return nil, false
 	}
 	var claims struct {
-		Exp   int64    `json:"exp"`
-		Iss   string   `json:"iss"`
-		Roles []string `json:"roles"`
+		Exp         int64  `json:"exp"`
+		Iss         string `json:"iss"`
+		RealmAccess struct {
+			Roles []string `json:"roles"`
+		} `json:"realm_access"`
 	}
 	if err := json.Unmarshal(payload, &claims); err != nil {
 		return nil, false
@@ -199,7 +201,7 @@ func (s *Server) parseToken(tokenStr string) (roles []string, ok bool) {
 	if claims.Iss != s.KeycloakURL+"/realms/"+s.Realm {
 		return nil, false
 	}
-	return claims.Roles, true
+	return claims.RealmAccess.Roles, true
 }
 
 // ── Auth middleware ──────────────────────────────────────────────────────────
@@ -231,17 +233,15 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (s *Server) requireRole(role string, next http.HandlerFunc) http.HandlerFunc {
-	return s.requireAuth(func(w http.ResponseWriter, r *http.Request) {
-		for _, ro := range strings.Split(r.Header.Get("X-Roles"), ",") {
-			if ro == role {
-				next(w, r)
-				return
-			}
+// hasRole checks whether X-Roles (set by requireAuth) contains role.
+// Must only be called inside a requireAuth-wrapped handler.
+func hasRole(r *http.Request, role string) bool {
+	for _, ro := range strings.Split(r.Header.Get("X-Roles"), ",") {
+		if ro == role {
+			return true
 		}
-		writeJSON(w, http.StatusForbidden,
-			fmt.Sprintf(`{"error":"forbidden","required":%q}`, role))
-	})
+	}
+	return false
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -412,10 +412,14 @@ func (s *Server) Build(ctx context.Context, addr string) *http.Server {
 	mux.HandleFunc("/api/v1/raw", s.requireAuth(s.Raw.Handler))
 	mux.HandleFunc("/api/v1/stream", s.requireAuth(s.streamEvents))
 
-	// Rules: GET requires auth, POST requires admin role
+	// Rules: GET requires auth, POST requires admin role (X-Roles set by requireAuth above)
 	mux.HandleFunc("/api/v1/rules", s.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			s.requireRole("admin", s.handleRulesPost)(w, r)
+			if !hasRole(r, "admin") {
+				writeJSON(w, http.StatusForbidden, `{"error":"forbidden","required":"admin"}`)
+				return
+			}
+			s.handleRulesPost(w, r)
 			return
 		}
 		s.handleRules(w, r)

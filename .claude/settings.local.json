@@ -53,7 +53,10 @@
       "Bash(curl -s https://raw.githubusercontent.com/fastapi/full-stack-fastapi-template/master/.github/workflows/test-docker-compose.yml)",
       "Bash(curl -s https://raw.githubusercontent.com/fastapi/full-stack-fastapi-template/master/.github/workflows/playwright.yml)",
       "Bash(curl -s https://raw.githubusercontent.com/fastapi/full-stack-fastapi-template/master/.github/workflows/pre-commit.yml)",
-      "Bash(curl -s https://raw.githubusercontent.com/fastapi/full-stack-fastapi-template/master/backend/pyproject.toml)"
+      "Bash(curl -s https://raw.githubusercontent.com/fastapi/full-stack-fastapi-template/master/backend/pyproject.toml)",
+      "Bash(curl -s https://raw.githubusercontent.com/fastapi/full-stack-fastapi-template/master/frontend/package.json)",
+      "Bash(curl -s https://raw.githubusercontent.com/fastapi/full-stack-fastapi-template/master/backend/app/core/config.py)",
+      "Bash(curl -s https://raw.githubusercontent.com/fastapi/full-stack-fastapi-template/master/backend/app/core/security.py)"
     ],
     "additionalDirectories": [
       "C:\\Users\\waeel\\.claude"

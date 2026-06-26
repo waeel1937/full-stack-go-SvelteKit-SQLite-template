@@ -1,4 +1,4 @@
-# IIoT Edge Full-Stack Platform
+# Full-Stack IIoT Edge Template
 
 [![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![SvelteKit](https://img.shields.io/badge/SvelteKit-5-FF3E00?logo=svelte&logoColor=white)](https://kit.svelte.dev)
@@ -6,13 +6,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](https://opensource.org/licenses/MIT)
 [![Green IT](https://img.shields.io/badge/Green%20IT-%3C30MB%20RAM-22c55e)](https://github.com)
 
-A production-ready, **Green IT** full-stack platform for industrial IoT and automation edge devices. Runs as a single 18 MB static binary on Revolution Pi, Raspberry Pi, mini-PCs, and industrial computers — consuming under 30 MB RAM with zero cloud dependency.
+A production-ready, **Green IT** full-stack template for industrial IoT and automation edge devices. Clone it, configure your connectors, and run — as a single 18 MB static binary on Revolution Pi, Raspberry Pi, mini-PCs, and industrial computers, consuming under 30 MB RAM with zero cloud dependency.
 
 ---
 
 ## What This Is
 
-A complete edge intelligence platform: sensors talk Modbus TCP or OPC-UA, data is aggregated locally in 1-second windows, threshold rules fire alerts in under 10 ms, and only compressed summaries reach the cloud. The frontend streams live data over SSE with no polling. Auth is Keycloak with RSA-verified JWTs and RBAC. The entire Go backend is a single static binary with no external runtime.
+A complete full-stack template for building industrial edge applications: sensors talk Modbus TCP or OPC-UA, data is aggregated locally in 1-second windows, threshold rules fire alerts in under 10 ms, and only compressed summaries reach the cloud. The frontend streams live data over SSE with no polling. Auth is Keycloak with RSA-verified JWTs and RBAC. The entire Go backend is a single static binary with no external runtime.
 
 ---
 

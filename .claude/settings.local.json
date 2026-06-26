@@ -27,6 +27,9 @@
       "Bash(docker stats *)",
       "Skill(update-config)",
       "Skill(update-config:*)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\waeel\\.claude"
     ]
   }
 }

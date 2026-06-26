@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](https://opensource.org/licenses/MIT)
 [![Green IT](https://img.shields.io/badge/Green%20IT-%3C30MB%20RAM-22c55e)](https://github.com)
 
-A production-ready, **Green IT** full-stack template for industrial IoT and automation edge devices. Clone it, configure your connectors, and run — as a single 18 MB static binary on Revolution Pi, Raspberry Pi, mini-PCs, and industrial computers, consuming under 30 MB RAM with zero cloud dependency.
+A production-ready, **Green IT** full-stack template for industrial IoT and automation edge devices. Clone it, configure your connectors, and run — as a single 18 MB static binary on Revolution Pi, Raspberry Pi, mini-PCs, and industrial computers, consuming under 30 MB RAM with zero cloud dependency. 
 
 ---
 

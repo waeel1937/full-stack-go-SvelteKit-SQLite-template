@@ -1,44 +1,26 @@
 <script>
-  import { onMount } from 'svelte';
-
-  let alertLog = [];
-
-  onMount(() => {
-    const i = setInterval(async () => {
-      try {
-        const res = await fetch('http://localhost:8080/api/v1/aggregates?window_ms=1000&limit=5');
-        const data = await res.json();
-        for (const a of data) {
-          if (a.avg > 80 && a.metric === 'temperature') {
-            alertLog = [{time: Date.now(), metric: a.metric, msg: 'Temperature above 80', val: a.avg}, ...alertLog].slice(0, 50);
-          }
-          if (a.max > 100 && a.metric === 'temperature') {
-            alertLog = [{time: Date.now(), metric: a.metric, msg: 'Temperature critical', val: a.max}, ...alertLog].slice(0, 50);
-          }
-        }
-      } catch(e) {}
-    }, 3000);
-    return () => clearInterval(i);
-  });
+  import { alerts } from '$lib/stores/api.js';
+  // Alerts are pushed in real-time via the SSE stream started in +layout.svelte.
+  // No polling or manual fetch needed.
 </script>
 
 <div class="page-head">
   <h1>Alerts</h1>
-  <span class="count">{alertLog.length} events</span>
+  <span class="count">{$alerts.length} events</span>
 </div>
 
-{#if alertLog.length === 0}
-  <div class="empty">No alerts triggered. Rules are evaluating against incoming aggregates.</div>
+{#if $alerts.length === 0}
+  <div class="empty">No alerts triggered. Rules are evaluating incoming aggregates in real-time.</div>
 {:else}
   <div class="list">
-    {#each alertLog as a}
+    {#each $alerts as a (a.time + a.key + a.message)}
       <div class="item">
         <div class="item-bar"></div>
         <div class="item-body">
-          <div class="item-msg">{a.msg}</div>
+          <div class="item-msg">{a.message}</div>
           <div class="item-meta">
-            <span class="tag">{a.metric}</span>
-            <span class="val">{a.val.toFixed(2)}</span>
+            <span class="tag">{a.key}</span>
+            <span class="val">{a.value.toFixed(2)}</span>
             <span class="time">{new Date(a.time).toLocaleTimeString()}</span>
           </div>
         </div>

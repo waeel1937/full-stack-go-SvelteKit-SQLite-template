@@ -146,11 +146,13 @@ A Revolution Pi running this stack draws approximately 5 watts. An equivalent cl
 
 ### Less Power
 
-Go compiles to a single static binary with no external runtime dependencies. There is no JVM, no Node.js process, no Python interpreter running in the background. The application idles at under 30 MB RAM and releases CPU when there is nothing to process.
+The Go backend compiles to a single static binary with no external runtime dependencies. On the edge device there is no JVM, no Node.js process, no Python interpreter, no database daemon. The binary idles at under 30 MB RAM and releases CPU immediately when there is nothing to process.
 
 SQLite in WAL mode eliminates the need for a separate database process. There is no PostgreSQL daemon, no connection pooling overhead, no background vacuum process consuming resources continuously.
 
-This means the hardware spends most of its time idle — and idle hardware consumes almost no energy.
+> **Note on the development stack:** Running `docker compose up` on a developer PC starts Keycloak (a Java application) which alone uses 700 MB – 1.2 GB RAM. That is expected — Keycloak is your auth server for development and testing, not a component that runs on the edge device in production. The `< 30 MB` figure refers to the edge device deployment only.
+
+This means the edge hardware spends most of its time idle — and idle hardware consumes almost no energy.
 
 ### Longer Hardware Life
 
@@ -183,6 +185,41 @@ Hardware embodied carbon avoided (10yr vs 5yr lifecycle):
 ```
 
 These numbers can be used directly in ESG reporting, Scope 3 disclosures, and Product Carbon Footprint (PCF) calculations.
+
+---
+
+## System Requirements
+
+There are two very different resource profiles depending on how you run the platform.
+
+### Docker Development Stack (`docker compose up`)
+
+This mode runs Keycloak, the Go backend, and the SvelteKit frontend all on one machine. Keycloak is a Java application and is by far the heaviest component.
+
+| Component | RAM | Disk (image) |
+|---|---|---|
+| Keycloak 26 (JVM, start-dev) | 700 MB – 1.2 GB | ~500 MB |
+| Go backend (static binary) | ~20 MB | ~20 MB |
+| SvelteKit / Node.js frontend | ~100 MB | ~180 MB |
+| **Total stack** | **~800 MB – 1.5 GB** | **~1.5 – 2 GB** |
+
+**Recommended for development:** 8 GB RAM, 5 GB free disk.
+An 8 GB PC runs this stack comfortably — the full stack uses roughly 1–1.5 GB, leaving 6+ GB free.
+
+> Keycloak is only needed for development and full-stack testing. On a real edge device it runs on a separate auth server — not on the device itself.
+
+### Edge Device Bare-Metal (production)
+
+On an actual edge device only the Go binary and SQLite run. No JVM, no Node.js, no container runtime.
+
+| Component | RAM | Disk |
+|---|---|---|
+| Go binary (all-in-one) | ~20 MB | ~18 MB |
+| SQLite data file | ~1 MB/day aggregates | grows slowly |
+| **Total** | **< 30 MB** | **< 50 MB** |
+
+**Minimum device RAM:** 128 MB (e.g. Revolution Pi 3 with 1 GB is very comfortable).
+The process idles at ~2% CPU or less and releases the scheduler immediately when there is nothing to process.
 
 ---
 
@@ -320,6 +357,7 @@ All `/api/v1/*` endpoints require a valid JWT token in the `Authorization: Beare
 | `/api/v1/status` | GET | JWT | any | System health: goroutines, memory, uptime |
 | `/api/v1/aggregates` | GET | JWT | any | Aggregated time series data |
 | `/api/v1/raw` | GET | JWT | any | Raw ring buffer snapshot |
+| `/api/v1/stream` | GET (SSE) | JWT | any | Server-Sent Events: real-time metric, aggregate, and alert events. Token accepted via `?token=` query param (EventSource cannot set headers) |
 | `/api/v1/rules` | GET | JWT | any | List all active rules |
 | `/api/v1/rules` | POST | JWT | admin | Create or update a rule |
 | `/metrics` | GET | none | any | Prometheus metrics |
@@ -334,26 +372,34 @@ All `/api/v1/*` endpoints require a valid JWT token in the `Authorization: Beare
 ### gRPC Service
 ```protobuf
 service EdgeService {
+  // Server-side streaming: pushes every MetricEvent from the fan-out bus.
+  // Optional key_filter restricts the stream to one metric key.
   rpc StreamMetrics (StreamRequest) returns (stream MetricEvent);
+
+  // Unary: returns the last 100 aggregates for a given window size.
   rpc GetAggregates (AggregateRequest) returns (AggregateResponse);
 }
 
+message StreamRequest {
+  string key_filter = 1; // optional, empty = all metrics
+}
+
 message MetricEvent {
-  int64 time = 1;
+  int64  time   = 1; // Unix milliseconds
   string source = 2;
-  string key = 3;
-  double value = 4;
-  bool ok = 5;
+  string key    = 3;
+  double value  = 4;
+  bool   ok     = 5;
 }
 
 message Aggregate {
-  int64 time = 1;
-  int64 window_ms = 2;
-  string metric = 3;
-  double avg = 4;
-  double min = 5;
-  double max = 6;
-  int64 count = 7;
+  int64  time      = 1;
+  int64  window_ms = 2;
+  string metric    = 3;
+  double avg       = 4;
+  double min       = 5;
+  double max       = 6;
+  int64  count     = 7;
 }
 ```
 
@@ -494,7 +540,17 @@ Tauri requires Rust installed on the build machine. The resulting binary is a si
 ```
 Runs on existing hardware — no replacement needed
 Single static binary — no runtime dependencies
-< 30 MB RAM at idle
+
+Resource footprint (edge device, bare-metal):
+  < 30 MB RAM at idle          (Go binary + SQLite, no JVM, no Node.js)
+  < 20 MB binary on disk
+  ~2% CPU idle or less
+
+Resource footprint (development, Docker Compose on PC):
+  ~800 MB – 1.5 GB RAM         (dominated by Keycloak JVM)
+  ~1.5 – 2 GB disk for images
+  Recommended: 8 GB RAM PC     (6+ GB free while running)
+
 95-99% less data sent to cloud
 Local rule evaluation < 10 ms latency
 Offline-first — works without internet connectivity

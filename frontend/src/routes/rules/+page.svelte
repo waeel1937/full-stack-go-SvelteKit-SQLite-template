@@ -4,26 +4,41 @@
 
   let nr = { id: '', key: '', condition: 'avg_gt', threshold: 0, message: '', enabled: true };
   let show = false;
+  let submitError = '';
 
   onMount(() => { fetchRules(); });
 
   async function submit() {
-    if (!nr.key || !nr.message) return;
-    await createRule(nr);
-    nr = { id: '', key: '', condition: 'avg_gt', threshold: 0, message: '', enabled: true };
-    show = false;
-    fetchRules();
+    if (!nr.id || !nr.key || !nr.message) {
+      submitError = 'ID, metric key and message are required.';
+      return;
+    }
+    submitError = '';
+    try {
+      await createRule(nr);
+      nr = { id: '', key: '', condition: 'avg_gt', threshold: 0, message: '', enabled: true };
+      show = false;
+      await fetchRules();
+    } catch (e) {
+      submitError = e.message;
+    }
   }
 </script>
 
 <div class="page-head">
   <h1>Rules</h1>
-  <button class="btn" on:click={() => show = !show}>{show ? 'Cancel' : '+ Add Rule'}</button>
+  <button class="btn" onclick={() => { show = !show; submitError = ''; }}>
+    {show ? 'Cancel' : '+ Add Rule'}
+  </button>
 </div>
 
 {#if show}
   <div class="form">
+    {#if submitError}
+      <div class="form-err">{submitError}</div>
+    {/if}
     <div class="row">
+      <label>Rule ID<input bind:value={nr.id} placeholder="temp-warn" /></label>
       <label>Metric key<input bind:value={nr.key} placeholder="temperature" /></label>
       <label>Condition
         <select bind:value={nr.condition}>
@@ -32,14 +47,16 @@
           <option value="min_lt">min &lt; threshold</option>
         </select>
       </label>
-      <label>Threshold<input type="number" bind:value={nr.threshold} step="0.1" /></label>
     </div>
-    <label>Alert message<input bind:value={nr.message} placeholder="Temperature too high" /></label>
-    <button class="btn primary" on:click={submit}>Create rule</button>
+    <div class="row half">
+      <label>Threshold<input type="number" bind:value={nr.threshold} step="0.1" /></label>
+      <label>Alert message<input bind:value={nr.message} placeholder="Temperature too high" /></label>
+    </div>
+    <button class="btn primary" onclick={submit}>Create rule</button>
   </div>
 {/if}
 
-{#each $rules as r}
+{#each $rules as r (r.id)}
   <div class="ri" class:off={!r.enabled}>
     <div class="ri-head">
       <span class="ri-id">{r.id}</span>
@@ -60,7 +77,9 @@
   .btn.primary { background: var(--ac); color: #0c1117; border-color: var(--ac); font-weight: 700; }
   .btn.primary:hover { background: var(--ac2); }
   .form { background: var(--sf); border: 1px solid var(--ac); border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+  .form-err { color: var(--rd); font-size: 0.8rem; padding: 0.4rem; background: rgba(232,84,84,0.1); border-radius: 6px; }
   .row { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; }
+  .row.half { grid-template-columns: 1fr 2fr; }
   label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; color: var(--dim); font-weight: 600; }
   input, select { font-family: monospace; font-size: 0.85rem; padding: 0.55rem 0.7rem; background: var(--bg); color: var(--tx); border: 1px solid var(--bd); border-radius: 6px; outline: none; transition: border 0.2s; }
   input:focus, select:focus { border-color: var(--ac); }

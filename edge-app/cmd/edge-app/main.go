@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"net"
+	"net/http"
 	"os"
 	"time"
 
@@ -21,6 +23,7 @@ import (
 	"edge-app/internal/rules"
 	"edge-app/internal/storage"
 	"edge-app/internal/storage/ringbuffer"
+	cloudsync "edge-app/internal/sync"
 
 	"google.golang.org/grpc"
 )
@@ -38,7 +41,7 @@ func main() {
 
 	cfg, err := config.Load("config/app.yaml")
 	if err != nil {
-		panic(err)
+		log.Fatalf("config: %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -48,52 +51,87 @@ func main() {
 
 	store, err := storage.Open(cfg.Database.Path)
 	if err != nil {
-		panic(err)
+		log.Fatalf("storage: %v", err)
+	}
+	defer store.Close()
+
+	ruleEngine, err := rules.NewEngine(bus, store)
+	if err != nil {
+		log.Fatalf("rules: %v", err)
 	}
 
 	rawBuffer := ringbuffer.New(10000)
+
 	rawCapture := &aggregator.RawCapture{Bus: bus, Buffer: rawBuffer}
 	agg := &aggregator.Aggregator{
 		Window: time.Duration(cfg.Aggregator.WindowMs) * time.Millisecond,
 		Bus:    bus,
 	}
 	persist := &aggregator.Persister{Bus: bus, Store: store}
-	ruleEngine := rules.NewEngine(bus)
 
 	httpServer := &api.Server{
 		DB:          store.DB,
+		Bus:         bus,
 		Status:      api.NewStatusServer(),
 		Raw:         &api.RawServer{Buffer: rawBuffer},
 		RuleEngine:  ruleEngine,
 		KeycloakURL: env("KEYCLOAK_URL", "http://localhost:8180"),
 		Realm:       env("KEYCLOAK_REALM", "edge"),
+		CORSOrigin:  env("CORS_ORIGIN", ""),
 	}
 
+	// gRPC
 	grpcSrv := grpc.NewServer()
-	pb.RegisterEdgeServiceServer(grpcSrv, &grpcapi.Server{DB: store.DB})
-
-	lis, err := net.Listen("tcp", ":"+fmt.Sprint(cfg.Server.GRPCPort))
+	pb.RegisterEdgeServiceServer(grpcSrv, &grpcapi.Server{DB: store.DB, Bus: bus})
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Server.GRPCPort))
 	if err != nil {
-		panic(err)
+		log.Fatalf("gRPC listen: %v", err)
 	}
 
-	go rawCapture.Run()
-	go agg.Run()
-	go persist.Run()
-	go ruleEngine.Run()
-	go httpServer.Run(":" + fmt.Sprint(cfg.Server.HTTPPort))
+	// HTTP — Build returns a fully configured *http.Server
+	httpSrv := httpServer.Build(ctx, fmt.Sprintf(":%d", cfg.Server.HTTPPort))
+
+	// Cloud sync (optional — only runs if endpoint is configured)
+	if endpoint := env("CLOUD_SYNC_ENDPOINT", ""); endpoint != "" {
+		cs := &cloudsync.CloudSync{
+			Store:    store,
+			Endpoint: endpoint,
+			Interval: 30 * time.Second,
+		}
+		go cs.Run(ctx)
+	}
+
+	go rawCapture.Run(ctx)
+	go agg.Run(ctx)
+	go persist.Run(ctx)
+	go ruleEngine.Run(ctx)
+	go func() {
+		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("HTTP server: %v", err)
+		}
+	}()
 	go grpcSrv.Serve(lis)
 
 	connector.StartAll(cfg.Connectors, bus)
 
 	hasConnector := cfg.Connectors.Modbus.Enabled || cfg.Connectors.OPCUA.Enabled
 	if !hasConnector {
-		logging.Logger.Println("no connectors enabled, starting demo producer")
+		logging.Logger.Println("no connectors enabled — starting demo producer")
 		go demo(ctx, bus)
 	}
 
+	// Wait for shutdown signal
 	<-ctx.Done()
+	logging.Logger.Println("shutting down…")
+
+	// Give in-flight requests up to 10 s to complete
+	shutCtx, shutCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutCancel()
+	if err := httpSrv.Shutdown(shutCtx); err != nil {
+		log.Printf("HTTP shutdown: %v", err)
+	}
 	grpcSrv.GracefulStop()
+	logging.Logger.Println("shutdown complete")
 }
 
 func demo(ctx context.Context, bus *core.Bus) {

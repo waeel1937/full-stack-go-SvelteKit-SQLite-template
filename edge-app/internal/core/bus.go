@@ -5,24 +5,21 @@ import (
 	"sync"
 )
 
+type RuleAlert struct {
+	Key     string  `json:"key"`
+	Message string  `json:"message"`
+	Value   float64 `json:"value"`
+	Time    int64   `json:"time"`
+}
+
 type Bus struct {
 	mu         sync.RWMutex
 	metricSubs []chan MetricEvent
 	aggSubs    []chan AggregateEvent
-	Alerts     chan RuleAlert
+	alertSubs  []chan RuleAlert
 }
 
-type RuleAlert struct {
-	Key     string
-	Message string
-	Value   float64
-}
-
-func NewBus() *Bus {
-	return &Bus{
-		Alerts: make(chan RuleAlert, 256),
-	}
-}
+func NewBus() *Bus { return &Bus{} }
 
 func (b *Bus) SubscribeMetrics(bufSize int) <-chan MetricEvent {
 	ch := make(chan MetricEvent, bufSize)
@@ -60,6 +57,26 @@ func (b *Bus) PublishAggregate(e AggregateEvent) {
 		case ch <- e:
 		default:
 			log.Printf("WARN: aggregate subscriber lagging key=%s", e.Key)
+		}
+	}
+}
+
+func (b *Bus) SubscribeAlerts(bufSize int) <-chan RuleAlert {
+	ch := make(chan RuleAlert, bufSize)
+	b.mu.Lock()
+	b.alertSubs = append(b.alertSubs, ch)
+	b.mu.Unlock()
+	return ch
+}
+
+func (b *Bus) PublishAlert(a RuleAlert) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	for _, ch := range b.alertSubs {
+		select {
+		case ch <- a:
+		default:
+			log.Printf("WARN: alert subscriber lagging key=%s", a.Key)
 		}
 	}
 }

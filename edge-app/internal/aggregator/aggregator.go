@@ -1,6 +1,7 @@
 package aggregator
 
 import (
+	"context"
 	"time"
 
 	"edge-app/internal/core"
@@ -13,7 +14,7 @@ type Aggregator struct {
 	Bus    *core.Bus
 }
 
-func (a *Aggregator) Run() {
+func (a *Aggregator) Run(ctx context.Context) {
 	logging.Logger.Println("aggregator started")
 	in := a.Bus.SubscribeMetrics(2048)
 	ticker := time.NewTicker(a.Window)
@@ -26,14 +27,19 @@ func (a *Aggregator) Run() {
 		count int
 	}
 
-	state := map[string]*acc{}
+	state := make(map[string]*acc)
 
 	for {
 		select {
-		case m := <-in:
-			metrics.MetricsIngested.Inc()
-			v, ok := state[m.Key]
+		case <-ctx.Done():
+			return
+		case m, ok := <-in:
 			if !ok {
+				return
+			}
+			metrics.MetricsIngested.Inc()
+			v, exists := state[m.Key]
+			if !exists {
 				state[m.Key] = &acc{sum: m.Value, min: m.Value, max: m.Value, count: 1}
 			} else {
 				v.sum += m.Value
@@ -58,7 +64,10 @@ func (a *Aggregator) Run() {
 				})
 				metrics.AggregatesEmitted.Inc()
 			}
-			state = map[string]*acc{}
+			// Clear in-place to avoid GC pressure from reallocating the map every tick
+			for k := range state {
+				delete(state, k)
+			}
 		}
 	}
 }

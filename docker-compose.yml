@@ -28,6 +28,11 @@ services:
     environment:
       - KEYCLOAK_URL=http://keycloak:8180
       - KEYCLOAK_REALM=edge
+      # Restrict CORS to the frontend origin in production.
+      # Use "*" only for local development without this variable.
+      - CORS_ORIGIN=http://localhost:3000
+      # Optional: set CLOUD_SYNC_ENDPOINT to enable cloud sync
+      # - CLOUD_SYNC_ENDPOINT=https://your-cloud-endpoint/ingest
     ports:
       - "8080:8080"
       - "9090:9090"
@@ -49,6 +54,11 @@ services:
     environment:
       - PORT=3000
       - HOST=0.0.0.0
+      # Browser-accessible URLs (must be reachable from the user's browser)
+      - PUBLIC_BACKEND_URL=http://localhost:8080
+      - PUBLIC_KC_URL=http://localhost:8180
+      - PUBLIC_KC_REALM=edge
+      - PUBLIC_KC_CLIENT=edge-frontend
     ports:
       - "3000:3000"
     depends_on:

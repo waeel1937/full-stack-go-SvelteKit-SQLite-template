@@ -3,11 +3,11 @@ package core
 import "time"
 
 type MetricEvent struct {
-	Time   time.Time
-	Source string
-	Key    string
-	Value  float64
-	OK     bool
+	Time   time.Time `json:"time"`
+	Source string    `json:"source"`
+	Key    string    `json:"key"`
+	Value  float64   `json:"value"`
+	OK     bool      `json:"ok"`
 }
 
 type AggregateEvent struct {

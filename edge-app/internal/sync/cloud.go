@@ -2,11 +2,14 @@ package sync
 
 import (
 	"bytes"
-	"database/sql"
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
+
+	"edge-app/internal/storage"
 )
 
 type Aggregate struct {
@@ -20,55 +23,101 @@ type Aggregate struct {
 }
 
 type CloudSync struct {
-	DB       *sql.DB
+	Store    *storage.Store
 	Endpoint string
 	Interval time.Duration
-	lastSync int64
 }
 
-func (c *CloudSync) Run() {
+func (c *CloudSync) Run(ctx context.Context) {
+	lastSync := c.loadLastSync()
+
 	ticker := time.NewTicker(c.Interval)
 	defer ticker.Stop()
-	log.Printf("cloud sync started interval=%s", c.Interval)
+	log.Printf("cloud sync started interval=%s lastSync=%d", c.Interval, lastSync)
 
-	for range ticker.C {
-		rows, err := c.DB.Query(
-			"SELECT time, window, metric, avg, min, max, count FROM aggregates WHERE time > ? ORDER BY time ASC LIMIT 50",
-			c.lastSync,
-		)
-		if err != nil {
-			log.Println("sync query error:", err)
-			continue
-		}
-
-		var batch []Aggregate
-		var maxTime int64
-		for rows.Next() {
-			var a Aggregate
-			if rows.Scan(&a.Time, &a.Window, &a.Metric, &a.Avg, &a.Min, &a.Max, &a.Count) == nil {
-				batch = append(batch, a)
-				if a.Time > maxTime {
-					maxTime = a.Time
-				}
-			}
-		}
-		rows.Close()
-
-		if len(batch) == 0 {
-			continue
-		}
-
-		b, _ := json.Marshal(batch)
-		resp, err := http.Post(c.Endpoint, "application/json", bytes.NewReader(b))
-		if err != nil {
-			log.Printf("sync error: %v (will retry)", err)
-			continue
-		}
-		resp.Body.Close()
-
-		if resp.StatusCode < 300 {
-			c.lastSync = maxTime
-			log.Printf("synced %d aggregates up to t=%d", len(batch), maxTime)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			lastSync = c.sync(ctx, lastSync)
 		}
 	}
+}
+
+func (c *CloudSync) loadLastSync() int64 {
+	v, ok, err := c.Store.KVGet("cloud_sync_last")
+	if err != nil {
+		log.Printf("cloud sync: could not load cursor: %v", err)
+		return 0
+	}
+	if !ok {
+		return 0
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+func (c *CloudSync) sync(ctx context.Context, lastSync int64) int64 {
+	rows, err := c.Store.DB.QueryContext(ctx,
+		`SELECT time, window, metric, avg, min, max, count
+		 FROM aggregates WHERE time > ? ORDER BY time ASC LIMIT 50`,
+		lastSync,
+	)
+	if err != nil {
+		log.Println("sync query error:", err)
+		return lastSync
+	}
+
+	var batch []Aggregate
+	var maxTime int64
+	for rows.Next() {
+		var a Aggregate
+		if err := rows.Scan(&a.Time, &a.Window, &a.Metric, &a.Avg, &a.Min, &a.Max, &a.Count); err == nil {
+			batch = append(batch, a)
+			if a.Time > maxTime {
+				maxTime = a.Time
+			}
+		}
+	}
+	rows.Close()
+
+	if len(batch) == 0 {
+		return lastSync
+	}
+
+	b, err := json.Marshal(batch)
+	if err != nil {
+		log.Printf("sync marshal error: %v", err)
+		return lastSync
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Endpoint, bytes.NewReader(b))
+	if err != nil {
+		log.Printf("sync request error: %v", err)
+		return lastSync
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("sync error: %v (will retry)", err)
+		return lastSync
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode < 300 {
+		if err := c.Store.KVSet("cloud_sync_last", strconv.FormatInt(maxTime, 10)); err != nil {
+			log.Printf("sync: could not persist cursor: %v", err)
+		}
+		log.Printf("synced %d aggregates up to t=%d", len(batch), maxTime)
+		return maxTime
+	}
+
+	log.Printf("sync: remote returned HTTP %d", resp.StatusCode)
+	return lastSync
 }

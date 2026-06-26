@@ -1,11 +1,12 @@
 <script>
   import { onMount } from 'svelte';
-  import { fetchStatus, status, token, username, login, logout } from '$lib/stores/api.js';
+  import { token, username, status, fetchStatus, login, logout, startStream, stopStream } from '$lib/stores/api.js';
 
   let loginUser = '';
   let loginPass = '';
   let loginError = '';
   let dark = true;
+  let statusInterval = null;
 
   function toggleTheme() {
     dark = !dark;
@@ -14,11 +15,24 @@
 
   onMount(() => {
     document.documentElement.setAttribute('data-theme', 'dark');
-    if ($token) {
-      fetchStatus();
-      const i = setInterval(fetchStatus, 5000);
-      return () => clearInterval(i);
-    }
+
+    // React to auth state changes: start/stop status polling and SSE stream
+    const unsub = token.subscribe(t => {
+      clearInterval(statusInterval);
+      statusInterval = null;
+      if (t) {
+        fetchStatus();
+        startStream();
+        statusInterval = setInterval(fetchStatus, 5000);
+      } else {
+        stopStream();
+      }
+    });
+
+    return () => {
+      unsub();
+      clearInterval(statusInterval);
+    };
   });
 
   async function handleLogin() {
@@ -27,8 +41,7 @@
       await login(loginUser, loginPass);
       loginUser = '';
       loginPass = '';
-      fetchStatus();
-    } catch(e) {
+    } catch {
       loginError = 'Invalid credentials';
     }
   }
@@ -60,9 +73,10 @@
         <div class="login-err">{loginError}</div>
       {/if}
       <label>Username<input bind:value={loginUser} placeholder="admin" /></label>
-      <label>Password<input type="password" bind:value={loginPass} placeholder="password" on:keydown={(e) => e.key === 'Enter' && handleLogin()} /></label>
-      <button class="btn-primary" on:click={handleLogin}>Sign in</button>
-      <button class="btn-toggle" on:click={toggleTheme}>{dark ? 'Light mode' : 'Dark mode'}</button>
+      <label>Password<input type="password" bind:value={loginPass} placeholder="password"
+        onkeydown={(e) => e.key === 'Enter' && handleLogin()} /></label>
+      <button class="btn-primary" onclick={handleLogin}>Sign in</button>
+      <button class="btn-toggle" onclick={toggleTheme}>{dark ? 'Light mode' : 'Dark mode'}</button>
     </div>
   </div>
 {:else}
@@ -75,7 +89,7 @@
         <a href="/rules" class="nav-link">Rules</a>
       </div>
       <div class="side-footer">
-        <button class="btn-toggle small" on:click={toggleTheme}>{dark ? 'Light' : 'Dark'}</button>
+        <button class="btn-toggle small" onclick={toggleTheme}>{dark ? 'Light' : 'Dark'}</button>
         {#if $status}
           <div class="status-row"><span class="dot on"></span> Online</div>
           <div class="status-detail">{$status.goroutines} goroutines</div>
@@ -86,7 +100,7 @@
         {/if}
         <div class="user-row">
           <span class="status-detail">{$username}</span>
-          <button class="btn-logout" on:click={logout}>Logout</button>
+          <button class="btn-logout" onclick={logout}>Logout</button>
         </div>
       </div>
     </nav>

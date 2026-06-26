@@ -11,7 +11,6 @@ dist/
 node_modules/
 frontend/build/
 frontend/.svelte-kit/
-src-tauri/target/
 *.exe
 *.binary
 
@@ -22,3 +21,6 @@ frontend/blob-report/
 
 # VS Code local overrides
 .vscode/settings.json
+
+# Claude Code (AI assistant config — personal, not app code)
+.claude/

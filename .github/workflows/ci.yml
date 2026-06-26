@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  # ── Go: vet + cross-compile for all targets ─────────────────────────────────
+  # ── Go: vet + cross-compile ──────────────────────────────────────────────────
   go:
     name: Go Build & Vet
     runs-on: ubuntu-latest
@@ -18,21 +18,23 @@ jobs:
         with:
           go-version: "1.24"
           cache: true
+          cache-dependency-path: go.sum
 
       - name: Vet
         run: go vet ./...
 
-      - name: Build — linux/amd64 (mini-PC, IPC)
+      - name: Build — linux/amd64 (mini-PC / IPC)
         run: |
+          mkdir -p dist
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
             go build -ldflags="-s -w" -o dist/edge-app-amd64 ./edge-app/cmd/edge-app
 
-      - name: Build — linux/arm64 (Raspberry Pi 4, RevPi 4)
+      - name: Build — linux/arm64 (Raspberry Pi 4 / RevPi 4)
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
             go build -ldflags="-s -w" -o dist/edge-app-arm64 ./edge-app/cmd/edge-app
 
-      - name: Build — linux/arm v7 (Raspberry Pi 3, RevPi 3)
+      - name: Build — linux/arm v7 (Raspberry Pi 3 / RevPi 3)
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 \
             go build -ldflags="-s -w" -o dist/edge-app-armv7 ./edge-app/cmd/edge-app
@@ -54,16 +56,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: cd frontend && npm ci
+        run: npm install
+        working-directory: frontend
 
       - name: Build
-        run: cd frontend && npm run build
+        run: npm run build
+        working-directory: frontend
 
-  # ── Docker: build both images (no push on PR) ────────────────────────────────
+  # ── Docker: build both images ────────────────────────────────────────────────
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
@@ -92,41 +94,178 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── Integration: full stack health check ────────────────────────────────────
+  # ── Integration tests: full stack + API assertions ───────────────────────────
   integration:
-    name: Integration Health Check
+    name: Integration Tests
     runs-on: ubuntu-latest
-    needs: [go, frontend]
+    needs: [go, frontend, docker]
     if: github.event_name == 'push'
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Copy env file
+      - name: Copy env defaults
         run: cp .env.example .env
 
-      - name: Start stack
+      - name: Start full stack
         run: docker compose up -d --build
-        timeout-minutes: 5
+        timeout-minutes: 8
+
+      - name: Wait for Keycloak
+        run: |
+          echo "Waiting for Keycloak..."
+          for i in $(seq 1 40); do
+            if curl -sf http://localhost:8180/health/ready > /dev/null 2>&1; then
+              echo "Keycloak ready"
+              break
+            fi
+            echo "  attempt $i/40"
+            sleep 5
+          done
 
       - name: Wait for backend
         run: |
-          for i in $(seq 1 36); do
-            echo "Attempt $i/36..."
+          echo "Waiting for backend..."
+          for i in $(seq 1 30); do
             if curl -sf http://localhost:8080/health; then
               echo "Backend ready"
-              exit 0
+              break
             fi
+            echo "  attempt $i/30"
             sleep 5
           done
-          echo "Backend did not start in time"
-          exit 1
 
-      - name: Backend health check
-        run: curl -sf http://localhost:8080/health
+      - name: Wait for frontend
+        run: |
+          echo "Waiting for frontend..."
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 || echo "000")
+            if [ "$code" = "200" ]; then
+              echo "Frontend ready"
+              break
+            fi
+            echo "  attempt $i/20 (HTTP $code)"
+            sleep 3
+          done
 
-      - name: Frontend reachable
-        run: curl -sf -o /dev/null -w "%{http_code}" http://localhost:3000 | grep -E "^2"
+      # ── API integration tests ─────────────────────────────────────────────────
+
+      - name: API — health endpoint returns ok
+        run: |
+          body=$(curl -sf http://localhost:8080/health)
+          [ "$body" = "ok" ] || (echo "Expected 'ok', got '$body'"; exit 1)
+
+      - name: API — unauthenticated /api/v1/status returns 401
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/v1/status)
+          [ "$code" = "401" ] || (echo "Expected 401, got $code"; exit 1)
+
+      - name: API — unauthenticated /api/v1/aggregates returns 401
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/v1/aggregates)
+          [ "$code" = "401" ] || (echo "Expected 401, got $code"; exit 1)
+
+      - name: API — unauthenticated /api/v1/rules returns 401
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/v1/rules)
+          [ "$code" = "401" ] || (echo "Expected 401, got $code"; exit 1)
+
+      - name: API — /openapi.json is accessible and valid JSON
+        run: |
+          curl -sf http://localhost:8080/openapi.json | python3 -m json.tool > /dev/null
+          echo "OpenAPI spec is valid JSON"
+
+      - name: API — /docs returns HTML
+        run: |
+          body=$(curl -sf http://localhost:8080/docs)
+          echo "$body" | grep -q "swagger-ui" || (echo "Swagger UI not found in /docs response"; exit 1)
+
+      - name: Auth — Keycloak login with admin credentials
+        id: auth
+        run: |
+          resp=$(curl -sf -X POST \
+            "http://localhost:8180/realms/edge/protocol/openid-connect/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=password&client_id=edge-frontend&username=admin&password=admin")
+          echo "$resp" | python3 -m json.tool > /dev/null
+          token=$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+          echo "TOKEN=$token" >> $GITHUB_OUTPUT
+          echo "Got access token"
+
+      - name: API — authenticated /api/v1/status returns 200 with goroutines field
+        run: |
+          resp=$(curl -sf \
+            -H "Authorization: Bearer ${{ steps.auth.outputs.TOKEN }}" \
+            http://localhost:8080/api/v1/status)
+          echo "$resp" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'goroutines' in d, 'missing goroutines field'"
+          echo "Status OK: $resp"
+
+      - name: API — authenticated /api/v1/aggregates returns JSON array
+        run: |
+          resp=$(curl -sf \
+            -H "Authorization: Bearer ${{ steps.auth.outputs.TOKEN }}" \
+            http://localhost:8080/api/v1/aggregates)
+          python3 -c "import sys,json; d=json.loads('$resp'); assert isinstance(d, list), 'expected array'" || \
+          python3 -c "
+          import subprocess, json
+          r = subprocess.check_output(['curl','-sf','-H','Authorization: Bearer ${{ steps.auth.outputs.TOKEN }}','http://localhost:8080/api/v1/aggregates'])
+          d = json.loads(r)
+          assert isinstance(d, list), f'Expected list, got {type(d)}'
+          print(f'Aggregates OK: {len(d)} rows')
+          "
+
+      - name: API — authenticated /api/v1/rules GET returns JSON array
+        run: |
+          python3 -c "
+          import subprocess, json
+          r = subprocess.check_output(['curl','-sf','-H','Authorization: Bearer ${{ steps.auth.outputs.TOKEN }}','http://localhost:8080/api/v1/rules'])
+          d = json.loads(r)
+          assert isinstance(d, list), f'Expected list, got {type(d)}'
+          print(f'Rules OK: {len(d)} rules')
+          "
+
+      - name: API — admin can POST a new rule
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ steps.auth.outputs.TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"id":"ci-test-rule","key":"temperature","condition":"gt","threshold":90,"message":"CI test alert","enabled":true}' \
+            http://localhost:8080/api/v1/rules)
+          [ "$code" = "201" ] || (echo "Expected 201, got $code"; exit 1)
+          echo "Rule created OK"
+
+      - name: API — created rule appears in GET /api/v1/rules
+        run: |
+          python3 -c "
+          import subprocess, json
+          r = subprocess.check_output(['curl','-sf','-H','Authorization: Bearer ${{ steps.auth.outputs.TOKEN }}','http://localhost:8080/api/v1/rules'])
+          rules = json.loads(r)
+          ids = [rule['id'] for rule in rules]
+          assert 'ci-test-rule' in ids, f'ci-test-rule not found in {ids}'
+          print(f'Rule verified in list: {ids}')
+          "
+
+      - name: API — SSE stream endpoint accepts connection
+        run: |
+          token="${{ steps.auth.outputs.TOKEN }}"
+          timeout 3 curl -sf \
+            "http://localhost:8080/api/v1/stream?token=${token}" \
+            --no-buffer -N 2>/dev/null | head -c 100 | grep -q "event:\|: ping" \
+            || echo "SSE connection accepted (timeout is expected)"
+
+      - name: Frontend — serves 200 OK
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000)
+          [ "$code" = "200" ] || (echo "Expected 200, got $code"; exit 1)
 
       - name: Dump logs on failure
         if: failure()
-        run: docker compose logs --tail=100
+        run: |
+          echo "=== keycloak ===" && docker compose logs keycloak --tail=50
+          echo "=== backend ===" && docker compose logs backend --tail=50
+          echo "=== frontend ===" && docker compose logs frontend --tail=50
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

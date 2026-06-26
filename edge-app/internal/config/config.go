@@ -10,7 +10,6 @@ import (
 type Config struct {
 	Server struct {
 		HTTPPort int `yaml:"http_port"`
-		GRPCPort int `yaml:"grpc_port"`
 	} `yaml:"server"`
 
 	Database struct {

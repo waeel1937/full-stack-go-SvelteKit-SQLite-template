@@ -32,7 +32,6 @@ services:
       - CLOUD_SYNC_ENDPOINT=${CLOUD_SYNC_ENDPOINT:-}
     ports:
       - "8080:8080"
-      - "9090:9090"
     depends_on:
       keycloak:
         condition: service_healthy

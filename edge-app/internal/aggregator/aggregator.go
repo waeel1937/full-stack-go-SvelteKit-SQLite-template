@@ -2,10 +2,10 @@ package aggregator
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"edge-app/internal/core"
-	"edge-app/internal/logging"
 	"edge-app/internal/metrics"
 )
 
@@ -15,7 +15,7 @@ type Aggregator struct {
 }
 
 func (a *Aggregator) Run(ctx context.Context) {
-	logging.Logger.Println("aggregator started")
+	log.Println("aggregator started")
 	in := a.Bus.SubscribeMetrics(2048)
 	ticker := time.NewTicker(a.Window)
 	defer ticker.Stop()

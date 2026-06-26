@@ -6,27 +6,23 @@ import (
 	"log"
 	"math"
 	"math/rand"
-	"net"
 	"net/http"
 	"os"
 	"time"
 
 	"edge-app/internal/aggregator"
-	grpcapi "edge-app/internal/api/grpc"
-	pb "edge-app/internal/api/grpc/pb"
 	"edge-app/internal/api"
 	"edge-app/internal/config"
 	"edge-app/internal/connector"
 	"edge-app/internal/core"
-	"edge-app/internal/logging"
 	"edge-app/internal/metrics"
 	"edge-app/internal/rules"
 	"edge-app/internal/storage"
 	"edge-app/internal/storage/ringbuffer"
 	cloudsync "edge-app/internal/sync"
-
-	"google.golang.org/grpc"
 )
+
+var logger = log.New(os.Stdout, "", log.LstdFlags|log.LUTC)
 
 func env(k, d string) string {
 	if v := os.Getenv(k); v != "" {
@@ -36,7 +32,6 @@ func env(k, d string) string {
 }
 
 func main() {
-	logging.Init()
 	metrics.Init()
 
 	cfg, err := config.Load("config/app.yaml")
@@ -80,18 +75,8 @@ func main() {
 		CORSOrigin:  env("CORS_ORIGIN", ""),
 	}
 
-	// gRPC
-	grpcSrv := grpc.NewServer()
-	pb.RegisterEdgeServiceServer(grpcSrv, &grpcapi.Server{DB: store.DB, Bus: bus})
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Server.GRPCPort))
-	if err != nil {
-		log.Fatalf("gRPC listen: %v", err)
-	}
-
-	// HTTP — Build returns a fully configured *http.Server
 	httpSrv := httpServer.Build(ctx, fmt.Sprintf(":%d", cfg.Server.HTTPPort))
 
-	// Cloud sync (optional — only runs if endpoint is configured)
 	if endpoint := env("CLOUD_SYNC_ENDPOINT", ""); endpoint != "" {
 		cs := &cloudsync.CloudSync{
 			Store:    store,
@@ -110,28 +95,23 @@ func main() {
 			log.Fatalf("HTTP server: %v", err)
 		}
 	}()
-	go grpcSrv.Serve(lis)
 
 	connector.StartAll(cfg.Connectors, bus)
 
-	hasConnector := cfg.Connectors.Modbus.Enabled || cfg.Connectors.OPCUA.Enabled
-	if !hasConnector {
-		logging.Logger.Println("no connectors enabled — starting demo producer")
+	if !cfg.Connectors.Modbus.Enabled && !cfg.Connectors.OPCUA.Enabled {
+		logger.Println("no connectors enabled — starting demo producer")
 		go demo(ctx, bus)
 	}
 
-	// Wait for shutdown signal
 	<-ctx.Done()
-	logging.Logger.Println("shutting down…")
+	logger.Println("shutting down…")
 
-	// Give in-flight requests up to 10 s to complete
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutCancel()
 	if err := httpSrv.Shutdown(shutCtx); err != nil {
 		log.Printf("HTTP shutdown: %v", err)
 	}
-	grpcSrv.GracefulStop()
-	logging.Logger.Println("shutdown complete")
+	logger.Println("shutdown complete")
 }
 
 func demo(ctx context.Context, bus *core.Bus) {

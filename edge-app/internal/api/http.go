@@ -406,6 +406,8 @@ func (s *Server) Build(ctx context.Context, addr string) *http.Server {
 		w.Write([]byte("ok"))
 	})
 	mux.Handle("/metrics", metrics.Handler())
+	mux.HandleFunc("/openapi.json", s.handleOpenAPI)
+	mux.HandleFunc("/docs", s.handleDocs)
 
 	mux.HandleFunc("/api/v1/aggregates", s.requireAuth(s.aggregates))
 	mux.HandleFunc("/api/v1/status", s.requireAuth(s.Status.Handler))

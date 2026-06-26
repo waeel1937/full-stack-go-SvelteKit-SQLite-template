@@ -1,0 +1,57 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Go: Build (amd64)",
+      "type": "shell",
+      "command": "CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags='-s -w' -o dist/edge-app ./edge-app/cmd/edge-app",
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Go: Build (arm64)",
+      "type": "shell",
+      "command": "CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags='-s -w' -o dist/edge-app-arm64 ./edge-app/cmd/edge-app",
+      "group": "build"
+    },
+    {
+      "label": "Go: Build (armv7)",
+      "type": "shell",
+      "command": "CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -ldflags='-s -w' -o dist/edge-app-armv7 ./edge-app/cmd/edge-app",
+      "group": "build"
+    },
+    {
+      "label": "Go: Vet",
+      "type": "shell",
+      "command": "go vet ./...",
+      "group": { "kind": "test", "isDefault": true }
+    },
+    {
+      "label": "Frontend: Dev server",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "isBackground": true,
+      "group": "build"
+    },
+    {
+      "label": "Frontend: Build",
+      "type": "shell",
+      "command": "npm run build",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "group": "build"
+    },
+    {
+      "label": "Docker: Up (dev)",
+      "type": "shell",
+      "command": "docker compose up --build",
+      "group": "build"
+    },
+    {
+      "label": "Docker: Down",
+      "type": "shell",
+      "command": "docker compose down",
+      "group": "build"
+    }
+  ]
+}

@@ -4,8 +4,8 @@ services:
     container_name: edge-keycloak
     command: start-dev --import-realm
     environment:
-      - KC_BOOTSTRAP_ADMIN_USERNAME=admin
-      - KC_BOOTSTRAP_ADMIN_PASSWORD=admin
+      - KC_BOOTSTRAP_ADMIN_USERNAME=${KC_ADMIN_USERNAME:-admin}
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD:-admin}
       - KC_HTTP_PORT=8180
       - KC_HEALTH_ENABLED=true
     ports:
@@ -26,13 +26,10 @@ services:
       dockerfile: edge-app/deploy/docker/Dockerfile
     container_name: edge-backend
     environment:
-      - KEYCLOAK_URL=http://keycloak:8180
-      - KEYCLOAK_REALM=edge
-      # Restrict CORS to the frontend origin in production.
-      # Use "*" only for local development without this variable.
-      - CORS_ORIGIN=http://localhost:3000
-      # Optional: set CLOUD_SYNC_ENDPOINT to enable cloud sync
-      # - CLOUD_SYNC_ENDPOINT=https://your-cloud-endpoint/ingest
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8180}
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-edge}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
+      - CLOUD_SYNC_ENDPOINT=${CLOUD_SYNC_ENDPOINT:-}
     ports:
       - "8080:8080"
       - "9090:9090"
@@ -52,15 +49,14 @@ services:
       dockerfile: Dockerfile
     container_name: edge-frontend
     environment:
-      - PORT=3000
+      - PORT=${FRONTEND_PORT:-3000}
       - HOST=0.0.0.0
-      # Browser-accessible URLs (must be reachable from the user's browser)
-      - PUBLIC_BACKEND_URL=http://localhost:8080
-      - PUBLIC_KC_URL=http://localhost:8180
-      - PUBLIC_KC_REALM=edge
-      - PUBLIC_KC_CLIENT=edge-frontend
+      - PUBLIC_BACKEND_URL=${PUBLIC_BACKEND_URL:-http://localhost:8080}
+      - PUBLIC_KC_URL=${PUBLIC_KC_URL:-http://localhost:8180}
+      - PUBLIC_KC_REALM=${PUBLIC_KC_REALM:-edge}
+      - PUBLIC_KC_CLIENT=${PUBLIC_KC_CLIENT:-edge-frontend}
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}"
     depends_on:
       backend:
         condition: service_healthy

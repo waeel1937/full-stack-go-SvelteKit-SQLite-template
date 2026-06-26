@@ -56,10 +56,20 @@
       "Bash(curl -s https://raw.githubusercontent.com/fastapi/full-stack-fastapi-template/master/backend/pyproject.toml)",
       "Bash(curl -s https://raw.githubusercontent.com/fastapi/full-stack-fastapi-template/master/frontend/package.json)",
       "Bash(curl -s https://raw.githubusercontent.com/fastapi/full-stack-fastapi-template/master/backend/app/core/config.py)",
-      "Bash(curl -s https://raw.githubusercontent.com/fastapi/full-stack-fastapi-template/master/backend/app/core/security.py)"
+      "Bash(curl -s https://raw.githubusercontent.com/fastapi/full-stack-fastapi-template/master/backend/app/core/security.py)",
+      "Read(//home/waeelhome3719/full-stack-go-SvelteKit-SQLite-template/edge-app/internal/api/**)",
+      "Read(///wsl.localhost/Ubuntu/home/waeelhome3719/full-stack-go-SvelteKit-SQLite-template/edge-app/internal/api/**)",
+      "Read(//home/waeelhome3719/full-stack-go-SvelteKit-SQLite-template/frontend/src/routes/**)",
+      "Read(///wsl.localhost/Ubuntu/home/waeelhome3719/full-stack-go-SvelteKit-SQLite-template/frontend/src/routes/**)"
     ],
     "additionalDirectories": [
-      "C:\\Users\\waeel\\.claude"
+      "C:\\Users\\waeel\\.claude",
+      "\\home\\waeelhome3719\\full-stack-go-SvelteKit-SQLite-template\\frontend\\src\\routes",
+      "\\\\wsl.localhost\\Ubuntu\\home\\waeelhome3719\\full-stack-go-SvelteKit-SQLite-template\\frontend\\src\\routes",
+      "\\home\\waeelhome3719\\full-stack-go-SvelteKit-SQLite-template\\frontend",
+      "\\\\wsl.localhost\\Ubuntu\\home\\waeelhome3719\\full-stack-go-SvelteKit-SQLite-template\\frontend",
+      "\\home\\waeelhome3719\\full-stack-go-SvelteKit-SQLite-template\\edge-app\\internal\\api",
+      "\\\\wsl.localhost\\Ubuntu\\home\\waeelhome3719\\full-stack-go-SvelteKit-SQLite-template\\edge-app\\internal\\api"
     ]
   }
 }

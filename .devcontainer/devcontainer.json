@@ -1,0 +1,33 @@
+{
+  "name": "Full-Stack IIoT Edge Template",
+  "image": "mcr.microsoft.com/devcontainers/go:1-1.24",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "postCreateCommand": "cd frontend && npm install",
+  "forwardPorts": [3000, 8080, 9090, 8180],
+  "portsAttributes": {
+    "3000": { "label": "Frontend" },
+    "8080": { "label": "Backend API" },
+    "9090": { "label": "gRPC" },
+    "8180": { "label": "Keycloak" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "svelte.svelte-vscode",
+        "ms-azuretools.vscode-docker",
+        "redhat.vscode-yaml",
+        "esbenp.prettier-vscode",
+        "zxh404.vscode-proto3"
+      ],
+      "settings": {
+        "go.toolsManagement.checkForUpdates": "local",
+        "go.useLanguageServer": true,
+        "[go]": { "editor.formatOnSave": true }
+      }
+    }
+  }
+}

@@ -7,6 +7,9 @@
   %sveltekit.head%
 </head>
 <body>
+  <script>
+    document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
+  </script>
   <div style="display: contents">%sveltekit.body%</div>
 </body>
 </html>

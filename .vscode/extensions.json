@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "golang.go",
+    "svelte.svelte-vscode",
+    "ms-azuretools.vscode-docker",
+    "redhat.vscode-yaml",
+    "esbenp.prettier-vscode",
+    "tamasfe.even-better-toml",
+    "ms-vscode.makefile-tools",
+    "zxh404.vscode-proto3"
+  ]
+}

@@ -11,11 +11,15 @@
 
   function toggleTheme() {
     dark = !dark;
-    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    const theme = dark ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
   }
 
   onMount(() => {
-    document.documentElement.setAttribute('data-theme', 'light');
+    const saved = localStorage.getItem('theme') ?? 'light';
+    dark = saved === 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
     const unsub = token.subscribe(t => {
       clearInterval(statusInterval);
       statusInterval = null;

@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch Edge App (demo mode)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/edge-app/cmd/edge-app",
+      "env": {
+        "KEYCLOAK_URL": "http://localhost:8180",
+        "KEYCLOAK_REALM": "edge",
+        "CORS_ORIGIN": "http://localhost:5173"
+      },
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Attach to running process",
+      "type": "go",
+      "request": "attach",
+      "mode": "local",
+      "processId": "${command:pickProcess}"
+    }
+  ]
+}

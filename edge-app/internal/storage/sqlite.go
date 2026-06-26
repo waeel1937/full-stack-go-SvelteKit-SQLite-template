@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -40,7 +41,27 @@ func Open(path string) (*Store, error) {
 		}
 	}
 
-	if _, err := db.Exec(`
+	if err := migrateDB(db); err != nil {
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+
+	insAgg, err := db.Prepare(
+		`INSERT INTO aggregates(time, window, metric, avg, min, max, count) VALUES(?,?,?,?,?,?,?)`,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Store{DB: db, insAgg: insAgg}, nil
+}
+
+// dbMigrations is a numbered list of schema changes applied in order.
+// Add new entries at the end — never modify existing ones.
+var dbMigrations = []struct {
+	version int
+	sql     string
+}{
+	{1, `
 CREATE TABLE IF NOT EXISTS aggregates (
 	time    INTEGER NOT NULL,
 	window  INTEGER NOT NULL,
@@ -65,18 +86,29 @@ CREATE TABLE IF NOT EXISTS kv (
 	k TEXT PRIMARY KEY,
 	v TEXT NOT NULL
 );
-`); err != nil {
-		return nil, err
-	}
+`},
+}
 
-	insAgg, err := db.Prepare(
-		`INSERT INTO aggregates(time, window, metric, avg, min, max, count) VALUES(?,?,?,?,?,?,?)`,
-	)
-	if err != nil {
-		return nil, err
+// migrateDB applies any pending migrations using SQLite's user_version pragma
+// as a lightweight schema version counter. Safe to run on existing databases.
+func migrateDB(db *sql.DB) error {
+	var version int
+	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		return err
 	}
-
-	return &Store{DB: db, insAgg: insAgg}, nil
+	for _, m := range dbMigrations {
+		if version >= m.version {
+			continue
+		}
+		if _, err := db.Exec(m.sql); err != nil {
+			return fmt.Errorf("migration v%d: %w", m.version, err)
+		}
+		if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", m.version)); err != nil {
+			return err
+		}
+		version = m.version
+	}
+	return nil
 }
 
 func (s *Store) Close() error {

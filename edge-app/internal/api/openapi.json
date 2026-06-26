@@ -1,0 +1,128 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "EdgeIIoT API",
+    "version": "1.0.0",
+    "description": "Full-Stack IIoT Edge Template — REST + SSE API"
+  },
+  "servers": [{ "url": "http://localhost:8080", "description": "Local" }],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" }
+    },
+    "schemas": {
+      "Aggregate": {
+        "type": "object",
+        "properties": {
+          "time":      { "type": "integer", "description": "Unix timestamp (seconds)" },
+          "window_ms": { "type": "integer", "description": "Aggregation window in ms" },
+          "metric":    { "type": "string" },
+          "avg":       { "type": "number" },
+          "min":       { "type": "number" },
+          "max":       { "type": "number" },
+          "count":     { "type": "integer" }
+        }
+      },
+      "Rule": {
+        "type": "object",
+        "required": ["id", "key", "condition", "threshold", "message"],
+        "properties": {
+          "id":        { "type": "string", "example": "temp-warn" },
+          "key":       { "type": "string", "example": "temperature" },
+          "condition": { "type": "string", "enum": ["gt","lt","gte","lte","eq"], "example": "gt" },
+          "threshold": { "type": "number", "example": 85.0 },
+          "message":   { "type": "string", "example": "Temperature too high" },
+          "enabled":   { "type": "boolean", "default": true }
+        }
+      },
+      "Alert": {
+        "type": "object",
+        "properties": {
+          "rule_id":   { "type": "string" },
+          "key":       { "type": "string" },
+          "value":     { "type": "number" },
+          "message":   { "type": "string" },
+          "fired_at":  { "type": "integer", "description": "Unix ms" }
+        }
+      },
+      "Status": {
+        "type": "object",
+        "properties": {
+          "uptime_sec":  { "type": "integer" },
+          "memory_mb":   { "type": "number" },
+          "goroutines":  { "type": "integer" },
+          "go_version":  { "type": "string" }
+        }
+      }
+    }
+  },
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "security": [],
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/api/v1/status": {
+      "get": {
+        "summary": "Runtime status",
+        "responses": {
+          "200": {
+            "description": "System status",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Status" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/aggregates": {
+      "get": {
+        "summary": "Query metric aggregates",
+        "parameters": [
+          { "name": "window_ms", "in": "query", "schema": { "type": "integer", "default": 1000 } },
+          { "name": "limit",     "in": "query", "schema": { "type": "integer", "default": 100, "maximum": 500 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of aggregates",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Aggregate" } } } }
+          }
+        }
+      }
+    },
+    "/api/v1/rules": {
+      "get": {
+        "summary": "List all rules",
+        "responses": {
+          "200": {
+            "description": "Rules list",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Rule" } } } }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create or update a rule (admin only)",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Rule" } } }
+        },
+        "responses": {
+          "201": { "description": "Rule created" },
+          "403": { "description": "Forbidden — admin role required" }
+        }
+      }
+    },
+    "/api/v1/stream": {
+      "get": {
+        "summary": "Server-Sent Events stream (metric / aggregate / alert events)",
+        "parameters": [
+          { "name": "token", "in": "query", "description": "JWT (required for EventSource)", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "SSE stream", "content": { "text/event-stream": {} } }
+        }
+      }
+    }
+  }
+}

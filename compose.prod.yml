@@ -1,0 +1,60 @@
+# Production override — adds Traefik reverse proxy with automatic HTTPS.
+#
+# Usage:
+#   cp .env.example .env
+#   # Set DOMAIN and ACME_EMAIL in .env
+#   docker compose -f docker-compose.yml -f compose.prod.yml up -d
+#
+# Required .env variables:
+#   DOMAIN=edge.example.com
+#   ACME_EMAIL=admin@example.com
+
+services:
+  traefik:
+    image: traefik:v3
+    container_name: edge-traefik
+    restart: unless-stopped
+    command:
+      - "--log.level=INFO"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.le.acme.tlschallenge=true"
+      - "--certificatesresolvers.le.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.le.acme.storage=/certs/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-certs:/certs
+
+  backend:
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.backend.rule: "Host(`api.${DOMAIN}`)"
+      traefik.http.routers.backend.entrypoints: websecure
+      traefik.http.routers.backend.tls.certresolver: le
+      traefik.http.services.backend.loadbalancer.server.port: "8080"
+
+  frontend:
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.frontend.rule: "Host(`${DOMAIN}`)"
+      traefik.http.routers.frontend.entrypoints: websecure
+      traefik.http.routers.frontend.tls.certresolver: le
+      traefik.http.services.frontend.loadbalancer.server.port: "3000"
+
+  keycloak:
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.keycloak.rule: "Host(`auth.${DOMAIN}`)"
+      traefik.http.routers.keycloak.entrypoints: websecure
+      traefik.http.routers.keycloak.tls.certresolver: le
+      traefik.http.services.keycloak.loadbalancer.server.port: "8180"
+
+volumes:
+  traefik-certs:
